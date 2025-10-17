@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Enterprise RPA Command Center Design System */
+    --background: 218 25% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 217 32% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 217 32% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 221 83% 65%;
+
+    --secondary: 217 32% 17%;
+    --secondary-foreground: 210 40% 90%;
+
+    --muted: 217 32% 15%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 142 76% 36%;
+    --accent-foreground: 210 40% 98%;
+
+    --success: 142 76% 45%;
+    --success-foreground: 210 40% 98%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 217 32% 8%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 32% 17%;
+    --input: 217 32% 17%;
+    --ring: 221 83% 53%;
+
+    /* RPA Specific Colors */
+    --bot-active: 142 76% 45%;
+    --bot-idle: 38 92% 50%;
+    --bot-error: 0 84% 60%;
+    --sla-good: 142 76% 45%;
+    --sla-warning: 38 92% 50%;
+    --sla-critical: 0 84% 60%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(142 76% 55%));
+    --gradient-warning: linear-gradient(135deg, hsl(var(--warning)), hsl(38 92% 60%));
+    --gradient-danger: linear-gradient(135deg, hsl(var(--destructive)), hsl(0 84% 70%));
+    --gradient-card: linear-gradient(135deg, hsl(var(--card)), hsl(217 32% 12%));
+
+    /* Shadows */
+    --shadow-glow: 0 0 20px hsl(var(--primary) / 0.2);
+    --shadow-card: 0 4px 12px hsl(0 0% 0% / 0.15);
+    --shadow-elevated: 0 8px 24px hsl(0 0% 0% / 0.25);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .light {
+    /* Light mode - pure white enterprise look */
+    --background: 0 0% 100%;
+    --foreground: 217 32% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 217 32% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 32% 15%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 217 32% 15%;
+
+    --muted: 0 0% 100%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
+
+    --border: 0 0% 95%;
+    --input: 0 0% 100%;
+    --ring: 221 83% 53%;
+
+    /* Sidebar colors for light mode */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 0 0% 95%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Gradients for light mode (no greys) */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(142 76% 55%));
+    --gradient-warning: linear-gradient(135deg, hsl(var(--warning)), hsl(38 92% 60%));
+    --gradient-danger: linear-gradient(135deg, hsl(var(--destructive)), hsl(0 84% 70%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%), hsl(0 0% 100%));
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
