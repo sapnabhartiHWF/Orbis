@@ -29,6 +29,8 @@ CORS(app, resources={
             "https://icatui-b74o.onrender.com",
             "https://newsantova.onrender.com",
             "http://192.168.29.65:8080",
+            "http://172.25.224.1:8080/",
+            "http://172.23.208.1:8080/",
             "https://orbis-demo.alphalogix.tech"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

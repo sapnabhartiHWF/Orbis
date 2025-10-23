@@ -19,7 +19,11 @@ import {
 import { Textarea } from "../components/ui/textarea";
 import { toast } from "../hooks/use-toast";
 import { extractMentions, getTimeAgo } from "../utils/collaborationUtils";
-import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "../components/ui/popover";
 
 interface CommentSystemProps {
   processId?: string;
@@ -35,9 +39,9 @@ export interface Comment {
   parentId?: string;
   mentions: string[];
   attachments: any[];
-  reactions: { emoji: string; users: string[] }[];
   isEdited: boolean;
   replies?: Comment[];
+  reactions: { emoji: string; count: number }[]; // ✅ simplified
 }
 
 interface User {
@@ -57,7 +61,23 @@ function parseJwt(token: string) {
   }
 }
 
-export function CommentSystem({ processId, fileId, title }: CommentSystemProps) {
+const aggregateReactions = (reactions: any[]) => {
+  const map: Record<string, number> = {};
+  reactions.forEach((r) => {
+    const emoji = r.EmojiName || r.emoji; // handle both types
+    if (emoji) {
+      map[emoji] = (map[emoji] || 0) + (r.count || 1);
+    }
+  });
+  return Object.entries(map).map(([emoji, count]) => ({ emoji, count }));
+};
+
+
+export function CommentSystem({
+  processId,
+  fileId,
+  title,
+}: CommentSystemProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -69,10 +89,13 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [emojis, setEmojis] = useState([]);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const userUrl = "https://newsantova.onrender.com/api/users";
-  const getcmtUrl = "https://newsantova.onrender.com/api/get-comments";
-  const addcmtUrl = "https://newsantova.onrender.com/api/add-comment";
+  const userUrl = "http://127.0.0.1:8000/api/users";
+  const getcmtUrl = "http://127.0.0.1:8000/api/get-comments";
+  const addcmtUrl = "http://127.0.0.1:8000/api/add-comment";
+  const reactCommentUrl = "http://127.0.0.1:8000/api/react-comment";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const token = localStorage.getItem("token");
 
@@ -91,19 +114,39 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
     const payload = parseJwt(token);
     if (payload) {
       setCurrentUser({
-        id: payload.UserId || payload.id,
+        id: payload.UserId || payload.userId || payload.id,
         name:
-          `${payload.FirstName || payload.firstName || ""} ${
-            payload.LastName || payload.lastName || ""
-          }`.trim() ||
-          payload.username ||
+          `${payload.FirstName || ""} ${payload.LastName || ""}`.trim() ||
+          payload.UserName ||
           "Unknown User",
       });
     }
   }, [token]);
 
-  // ✅ Fetch users
+  useEffect(() => {
+    const fetchEmojis = async () => {
+      try {
+        const response = await fetch(
+          "http://127.0.0.1:8000/api/get-all-reacts",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (!response.ok) throw new Error("Failed to fetch emojis");
+        const data = await response.json();
+        if (data.success && Array.isArray(data.data)) {
+          setEmojis(data.data); // [{ R_Id, EmojiName }]
+        }
+      } catch (err) {
+        console.error("Error fetching emojis:", err);
+      }
+    };
+
+    fetchEmojis();
+  }, []);
+
   const fetchUsers = async () => {
+    setUsersLoading(true); // ensure starts
     try {
       const response = await fetch(userUrl, {
         headers: { Authorization: `Bearer ${token}` },
@@ -121,45 +164,48 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
     } catch (err) {
       console.error("Error fetching users:", err);
     } finally {
-      setUsersLoading(false);
-    }
-  };
-
-  // ✅ Fetch comments
-  const fetchComments = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(getcmtUrl, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error("Failed to fetch comments");
-      const data = await response.json();
-
-      const commentsArray = data.comments || (Array.isArray(data) ? data : []);
-      const mappedComments: Comment[] = commentsArray.map((c: any) => ({
-        id: `c${c.CommentID}`,
-        content: c.CommentText || "",
-        author: c.UserName || "Unknown",
-        createdAt: new Date(c.CreatedDate || Date.now()).toISOString(),
-        parentId: c.ParentID ? `c${c.ParentID}` : undefined,
-        mentions: extractMentions(c.CommentText || ""),
-        attachments: [],
-        reactions: [],
-        isEdited: false,
-        replies: [],
-      }));
-      setComments(mappedComments);
-    } catch (error) {
-      console.error("Error fetching comments:", error);
-    } finally {
-      setLoading(false);
-      fetchUsers();
+      setUsersLoading(false); // ✅ ensures it ends
     }
   };
 
   useEffect(() => {
-    fetchComments();
+    fetchUsers();
   }, []);
+
+  // ✅ Fetch comments
+  const fetchComments = async () => {
+    setLoading(true); // ensure starts in loading
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/get-comments", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await response.json();
+      if (data.success && Array.isArray(data.comments)) {
+        const mapped = data.comments.map((c: any) => ({
+          id: `c${c.CommentID}`,
+          content: c.CommentText,
+          author: c.UserName,
+          createdAt: c.CreatedDate,
+          parentId: c.ParentID ? `c${c.ParentID}` : undefined,
+          mentions: c.MentionedUsersInfo || [],
+          attachments: [],
+          isEdited: false,
+          reactions: aggregateReactions(c.Reactions || []),
+        }));
+        setComments(mapped);
+      }
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+    } finally {
+      setLoading(false); // ✅ ensures it ends
+    }
+  };
+
+  // ✅ Now useEffect just *calls* it
+  useEffect(() => {
+    fetchComments();
+  }, [token]);
 
   // ✅ Handle mentions
   useEffect(() => {
@@ -265,23 +311,51 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
   };
 
   // ✅ Reaction
-  const handleReaction = (id: string, emoji: string) => {
-    if (!currentUser) return;
-    setComments((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        const existing = c.reactions.find((r) => r.emoji === emoji);
-        if (existing) {
-          existing.users = existing.users.includes(currentUser.name)
-            ? existing.users.filter((u) => u !== currentUser.name)
-            : [...existing.users, currentUser.name];
-        } else {
-          c.reactions.push({ emoji, users: [currentUser.name] });
-        }
-        return { ...c };
-      })
-    );
-  };
+  // ✅ Handle emoji reaction and sync with backend
+  const handleReaction = async (commentId: string, emoji: string) => {
+    if (!currentUser || !token) return;
+  
+    try {
+      const selectedEmoji = emojis.find((e) => e.EmojiName === emoji);
+      if (!selectedEmoji) return;
+  
+      const payload = {
+        CommentID: parseInt(commentId.replace("c", "")),
+        R_Id: selectedEmoji.R_Id,
+      };
+  
+      const response = await fetch(reactCommentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+  
+      const data = await response.json();
+  
+      if (data.success) {
+        // ✅ Update the comment instantly, without waiting for fetchComments()
+        setComments((prev) =>
+          prev.map((c) => {
+            if (c.id === commentId) {
+              const updatedReactions = aggregateReactions([
+                ...(c.reactions || []),
+                { EmojiName: emoji, count: 1 },
+              ]);
+              return { ...c, reactions: updatedReactions };
+            }
+            return c;
+          })
+        );        
+      } else {
+        toast({ title: "Failed to react", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Error reacting:", error);
+    }
+  };  
 
   const commentTree = comments.reduce((tree: Record<string, Comment>, c) => {
     if (!c.parentId) tree[c.id] = { ...c, replies: [] };
@@ -291,6 +365,12 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
   }, {} as Record<string, Comment>);
 
   const rootComments = Object.values(commentTree);
+  console.log({
+    loading,
+    usersLoading,
+    currentUser,
+    token,
+  });
 
   if (loading || usersLoading || !currentUser) {
     return (
@@ -307,7 +387,8 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageCircle className="w-5 h-5 text-primary" />
-          Discussion {title && <span className="text-muted-foreground">• {title}</span>}
+          Discussion{" "}
+          {title && <span className="text-muted-foreground">• {title}</span>}
         </CardTitle>
         <CardDescription>
           Collaborate with your team on this {processId ? "process" : "file"}
@@ -410,6 +491,7 @@ export function CommentSystem({ processId, fileId, title }: CommentSystemProps) 
                 handleReaction={handleReaction}
                 currentUser={currentUser.name}
                 setReplyingTo={setReplyingTo}
+                emojis={emojis}
               />
             ))
           )}
@@ -425,6 +507,7 @@ interface CommentItemProps {
   handleReaction: (id: string, emoji: string) => void;
   currentUser: string;
   setReplyingTo?: (id: string | null) => void;
+  emojis: { R_Id: number; EmojiName: string }[];
 }
 
 function CommentItem({
@@ -432,15 +515,18 @@ function CommentItem({
   handleReaction,
   currentUser,
   setReplyingTo,
+  emojis, // ✅ add this
 }: CommentItemProps) {
-  const reactions = [
-    { emoji: "👍", label: "Like" },
-    { emoji: "❤️", label: "Love" },
-    { emoji: "💡", label: "Insight" },
-    { emoji: "🎯", label: "Goal" },
-    { emoji: "🤔", label: "Think" },
-    { emoji: "🎉", label: "Celebrate" },
-  ];
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const reactions = emojis.map((e) => ({
+    emoji: e.EmojiName,
+    label: e.EmojiName,
+  }));
+
+  const handleEmojiClick = (emoji: string) => {
+    handleReaction(comment.id, emoji);
+    setIsPopoverOpen(false);
+  };
 
   return (
     <div className="border-t pt-4 pl-4">
@@ -458,10 +544,10 @@ function CommentItem({
 
           {/* ✅ Reactions + Reply */}
           <div className="flex items-center gap-2 mt-2">
-            <Popover>
+            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button size="sm" variant="ghost" className="h-7 px-2">
-                  <Heart className="w-3 h-3 mr-1" />
+                  {/* <Heart className="w-3 h-3 mr-1" /> */}
                   React
                 </Button>
               </PopoverTrigger>
@@ -469,11 +555,11 @@ function CommentItem({
                 <div className="flex gap-1">
                   {reactions.map((r) => (
                     <Button
-                      key={r.emoji}
+                      key={`${comment.id}-popover-${r.emoji}`}
                       size="sm"
                       variant="ghost"
                       className="h-8 w-8 p-0 text-lg"
-                      onClick={() => handleReaction(comment.id, r.emoji)}
+                      onClick={() => handleEmojiClick(r.emoji)}
                       title={r.label}
                     >
                       {r.emoji}
@@ -485,13 +571,12 @@ function CommentItem({
 
             {comment.reactions.map((r) => (
               <Button
-                key={r.emoji}
+                key={`${comment.id}-${r.emoji}`}
                 size="sm"
-                variant={r.users.includes(currentUser) ? "default" : "secondary"}
+                variant="secondary"
                 className="h-7 px-2 text-xs"
-                onClick={() => handleReaction(comment.id, r.emoji)}
               >
-                {r.emoji} {r.users.length}
+                {r.emoji} {r.count}
               </Button>
             ))}
 
@@ -499,7 +584,9 @@ function CommentItem({
               size="sm"
               variant="ghost"
               className="h-7 px-2"
-              onClick={() => setReplyingTo && setReplyingTo(comment.id)}
+              onClick={() => setReplyingTo && setReplyingTo(comment.id)
+                
+              }
             >
               <Reply className="w-3 h-3 mr-1" />
               Reply
@@ -516,6 +603,7 @@ function CommentItem({
                   handleReaction={handleReaction}
                   currentUser={currentUser}
                   setReplyingTo={setReplyingTo}
+                  emojis={emojis}
                 />
               ))}
             </div>
