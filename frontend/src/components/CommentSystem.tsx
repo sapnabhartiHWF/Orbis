@@ -72,7 +72,6 @@ const aggregateReactions = (reactions: any[]) => {
   return Object.entries(map).map(([emoji, count]) => ({ emoji, count }));
 };
 
-
 export function CommentSystem({
   processId,
   fileId,
@@ -314,16 +313,16 @@ export function CommentSystem({
   // ✅ Handle emoji reaction and sync with backend
   const handleReaction = async (commentId: string, emoji: string) => {
     if (!currentUser || !token) return;
-  
+
     try {
       const selectedEmoji = emojis.find((e) => e.EmojiName === emoji);
       if (!selectedEmoji) return;
-  
+
       const payload = {
         CommentID: parseInt(commentId.replace("c", "")),
         R_Id: selectedEmoji.R_Id,
       };
-  
+
       const response = await fetch(reactCommentUrl, {
         method: "POST",
         headers: {
@@ -332,9 +331,9 @@ export function CommentSystem({
         },
         body: JSON.stringify(payload),
       });
-  
+
       const data = await response.json();
-  
+
       if (data.success) {
         // ✅ Update the comment instantly, without waiting for fetchComments()
         setComments((prev) =>
@@ -348,14 +347,14 @@ export function CommentSystem({
             }
             return c;
           })
-        );        
+        );
       } else {
         toast({ title: "Failed to react", variant: "destructive" });
       }
     } catch (error) {
       console.error("Error reacting:", error);
     }
-  };  
+  };
 
   const commentTree = comments.reduce((tree: Record<string, Comment>, c) => {
     if (!c.parentId) tree[c.id] = { ...c, replies: [] };
@@ -515,9 +514,12 @@ function CommentItem({
   handleReaction,
   currentUser,
   setReplyingTo,
-  emojis, // ✅ add this
+  emojis,
 }: CommentItemProps) {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [showReplyBox, setShowReplyBox] = useState(false); // track reply box
+  const [replyText, setReplyText] = useState(""); // reply content
+
   const reactions = emojis.map((e) => ({
     emoji: e.EmojiName,
     label: e.EmojiName,
@@ -526,6 +528,15 @@ function CommentItem({
   const handleEmojiClick = (emoji: string) => {
     handleReaction(comment.id, emoji);
     setIsPopoverOpen(false);
+  };
+
+  const handleReplySubmit = () => {
+    if (!replyText.trim() || !setReplyingTo) return;
+    setReplyingTo(comment.id); // set parent
+    const event = new Event("submitReply"); // simple trigger
+    document.dispatchEvent(event);
+    setReplyText(""); // clear input
+    setShowReplyBox(false);
   };
 
   return (
@@ -542,12 +553,10 @@ function CommentItem({
           </div>
           <p className="text-sm mt-1">{comment.content}</p>
 
-          {/* ✅ Reactions + Reply */}
           <div className="flex items-center gap-2 mt-2">
             <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button size="sm" variant="ghost" className="h-7 px-2">
-                  {/* <Heart className="w-3 h-3 mr-1" /> */}
                   React
                 </Button>
               </PopoverTrigger>
@@ -584,14 +593,61 @@ function CommentItem({
               size="sm"
               variant="ghost"
               className="h-7 px-2"
-              onClick={() => setReplyingTo && setReplyingTo(comment.id)
-                
-              }
+              onClick={() => setShowReplyBox((prev) => !prev)}
             >
               <Reply className="w-3 h-3 mr-1" />
               Reply
             </Button>
           </div>
+
+          {/* ✅ Inline Reply Box */}
+          {showReplyBox && (
+            <div className="mt-2 ml-10 flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <Send className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="flex-1 space-y-2 relative">
+                <Textarea
+                  placeholder={`Reply to ${comment.author}...`}
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  className="h-8 min-h-5 p-1 px-3 bg-muted border-border resize-none"
+                />
+
+                <div className="flex justify-between items-center mt-1">
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline">
+                      <Paperclip className="w-3 h-3 mr-1" /> Attach
+                    </Button>
+                    <Button size="sm" variant="outline">
+                      <AtSign className="w-3 h-3 mr-1" /> Mention
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleReplySubmit}
+                      disabled={!replyText.trim()}
+                    >
+                      {/* <Send className="w-3 h-3 mr-1" />  */}
+                      Reply
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setShowReplyBox(false);
+                        setReplyText("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Nested Replies */}
           {comment.replies && comment.replies.length > 0 && (
