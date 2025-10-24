@@ -61,16 +61,8 @@ function parseJwt(token: string) {
   }
 }
 
-const aggregateReactions = (reactions: any[]) => {
-  const map: Record<string, number> = {};
-  reactions.forEach((r) => {
-    const emoji = r.EmojiName || r.emoji; // handle both types
-    if (emoji) {
-      map[emoji] = (map[emoji] || 0) + (r.count || 1);
-    }
-  });
-  return Object.entries(map).map(([emoji, count]) => ({ emoji, count }));
-};
+const aggregateReactions = (reactions: any[]) =>
+  reactions.map((r) => ({ emoji: r.EmojiName, count: r.ReactionCount }));
 
 export function CommentSystem({
   processId,
@@ -91,10 +83,11 @@ export function CommentSystem({
   const [emojis, setEmojis] = useState([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const userUrl = "http://127.0.0.1:8000/api/users";
-  const getcmtUrl = "http://127.0.0.1:8000/api/get-comments";
-  const addcmtUrl = "http://127.0.0.1:8000/api/add-comment";
-  const reactCommentUrl = "http://127.0.0.1:8000/api/react-comment";
+  const userUrl = "https://newsantova.onrender.com/api/users";
+  const getcmtUrl = "https://newsantova.onrender.com/api/get-comments";
+  const addcmtUrl = "https://newsantova.onrender.com/api/add-comment";
+  const reactCommentUrl = "https://newsantova.onrender.com/api/react-comment";
+  const getAllReact="https://newsantova.onrender.com/api/get-all-reacts";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const token = localStorage.getItem("token");
 
@@ -126,7 +119,7 @@ export function CommentSystem({
     const fetchEmojis = async () => {
       try {
         const response = await fetch(
-          "http://127.0.0.1:8000/api/get-all-reacts",
+          getAllReact,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -175,23 +168,28 @@ export function CommentSystem({
   const fetchComments = async () => {
     setLoading(true); // ensure starts in loading
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/get-comments", {
+      const response = await fetch(getcmtUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       const data = await response.json();
-      if (data.success && Array.isArray(data.comments)) {
-        const mapped = data.comments.map((c: any) => ({
-          id: `c${c.CommentID}`,
-          content: c.CommentText,
-          author: c.UserName,
-          createdAt: c.CreatedDate,
-          parentId: c.ParentID ? `c${c.ParentID}` : undefined,
-          mentions: c.MentionedUsersInfo || [],
-          attachments: [],
-          isEdited: false,
-          reactions: aggregateReactions(c.Reactions || []),
-        }));
+      if (data.success && Array.isArray(data.data)) {
+        const mapped = data.data
+          .map((c: any) => ({
+            id: `c${c.CommentID}`,
+            content: c.CommentText,
+            author: c.UserName,
+            createdAt: c.CreatedDate,
+            parentId: c.ParentID ? `c${c.ParentID}` : undefined,
+            mentions: c.MentionedUsersInfo || [],
+            attachments: [],
+            isEdited: false,
+            reactions: aggregateReactions(c.Reactions || []),
+          }))
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
         setComments(mapped);
       }
     } catch (error) {
@@ -335,24 +333,22 @@ export function CommentSystem({
       const data = await response.json();
 
       if (data.success) {
-        // ✅ Update the comment instantly, without waiting for fetchComments()
+        // ✅ Update comment reactions using existing count
         setComments((prev) =>
           prev.map((c) => {
             if (c.id === commentId) {
-              const updatedReactions = aggregateReactions([
-                ...(c.reactions || []),
-                { EmojiName: emoji, count: 1 },
-              ]);
-              return { ...c, reactions: updatedReactions };
+              const existing = c.reactions.find((r) => r.emoji === emoji);
+              if (existing) existing.count += 1;
+              else c.reactions.push({ emoji, count: 1 });
             }
-            return c;
+            return { ...c };
           })
         );
       } else {
         toast({ title: "Failed to react", variant: "destructive" });
       }
-    } catch (error) {
-      console.error("Error reacting:", error);
+    } catch (err) {
+      console.error(err);
     }
   };
 

@@ -87,12 +87,14 @@ def get_comments_with_reacts():
 
         for row in results:
             comment_id = row[0]
-            comment_text = row[1]
+            comment_text = row[1] or ""
             user_id = row[2]
-            user_name = row[3]
-            r_id = row[4]
-            emoji_name = row[5]
-            reaction_count = row[6]
+            user_name = row[3] or "Unknown User"
+            created_date = row[4]
+            parent_id = row[5]
+            r_id = row[6]  # can be None
+            emoji_name = row[7] or ""
+            reaction_count = row[8] or 0
 
             if comment_id not in comments_dict:
                 comments_dict[comment_id] = {
@@ -100,6 +102,8 @@ def get_comments_with_reacts():
                     "CommentText": comment_text,
                     "UserID": user_id,
                     "UserName": user_name,
+                    "CreatedDate": created_date,
+                    "ParentID": parent_id,
                     "Reactions": [],
                 }
 
@@ -117,55 +121,19 @@ def get_comments_with_reacts():
         conn.close()
 
 
+
+
 @discussion_bp.route("/api/get-comments", methods=["GET"])
 @token_required
 def get_comments_route(user_id, user_name):
-    data = get_comments_with_reacts()
-    return jsonify({"success": True, "data": data})
-
-
-# def insert_emoji_to_db(emoji_name: str):
-#     """
-#     Inserts a new emoji using santova.InsertReactions stored procedure.
-#     Returns True if successful.
-#     """
-#     if not emoji_name:
-#         raise ValueError("EmojiName is required")
-
-#     conn = connect_to_database()
-#     cursor = conn.cursor()
-
-#     try:
-#         # Call stored procedure instead of direct insert
-#         cursor.execute("EXEC santova.InsertReactions @EmojiName=%s", (emoji_name,))
-#         conn.commit()
-#         return True
-#     except Exception as e:
-#         conn.rollback()
-#         raise e
-#     finally:
-#         cursor.close()
-#         conn.close()
-
-
-
-# @discussion_bp.route("/api/insert-reactions", methods=["POST"])
-# @token_required
-# def add_emoji(user_id, user_name):
-#     """
-#     Adds a new emoji via santova.InsertReactions SP.
-#     """
-#     data = request.json
-#     emoji_name = data.get("emojiName")
-
-#     if not emoji_name:
-#         return jsonify({"message": "EmojiName is required", "success": False}), 400
-
-#     try:
-#         insert_emoji_to_db(emoji_name)
-#         return jsonify({"message": "Emoji added successfully", "success": True})
-#     except Exception as e:
-#         return jsonify({"message": str(e), "success": False}), 500
+    try:
+        data = get_comments_with_reacts()
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        import traceback
+        print("Error fetching comments:", str(e))
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # Get All React List
@@ -235,24 +203,4 @@ def react_comment_route(user_id, user_name):
         return jsonify({"success": True, "message": message})
     else:
         return jsonify({"success": False, "message": message}), 500
-
-
-# get reaction count per comment
-# def get_comment_reacts(comment_id):
-#     conn = connect_to_database()
-#     cursor = conn.cursor()
-#     try:
-#         cursor.execute("EXEC santova.GetReactsByComment %s", (comment_id,))
-#         results = cursor.fetchall()
-#         return [{"R_Id": row[0], "EmojiName": row[1], "ReactionCount": row[2]} for row in results]
-#     finally:
-#         cursor.close()
-#         conn.close()
-
-
-# @discussion_bp.route("/api/get-comment-reacts/<int:comment_id>", methods=["GET"])
-# @token_required
-# def get_comment_reacts_route(user_id, user_name, comment_id):
-#     data = get_comment_reacts(comment_id)
-#     return jsonify({"success": True, "data": data})
 
