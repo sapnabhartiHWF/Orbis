@@ -6,6 +6,7 @@ import {
   AtSign,
   Heart,
   Reply,
+  MoreHorizontal,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Button } from "../components/ui/button";
@@ -35,7 +36,7 @@ export interface Comment {
   id: string;
   content: string;
   author: string;
-  createdAt: string;
+  CreatedDate: string;
   parentId?: string;
   mentions: string[];
   attachments: any[];
@@ -83,11 +84,15 @@ export function CommentSystem({
   const [emojis, setEmojis] = useState([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const userUrl = "https://newsantova.onrender.com/api/users";
-  const getcmtUrl = "https://newsantova.onrender.com/api/get-comments";
-  const addcmtUrl = "https://newsantova.onrender.com/api/add-comment";
-  const reactCommentUrl = "https://newsantova.onrender.com/api/react-comment";
-  const getAllReact="https://newsantova.onrender.com/api/get-all-reacts";
+  const mentionRef = useRef<HTMLDivElement>(null);
+
+  const userUrl = "https://orbis-backend-usfo.onrender.com/api/users";
+  const getcmtUrl = "https://orbis-backend-usfo.onrender.com/api/get-comments";
+  const addcmtUrl = "https://orbis-backend-usfo.onrender.com/api/add-comment";
+  const reactCommentUrl = "https://orbis-backend-usfo.onrender.com/api/react-comment";
+  const getAllReact = "https://orbis-backend-usfo.onrender.com/api/get-all-reacts";
+  const deleteReactUrl = "https://orbis-backend-usfo.onrender.com/api/delete-reaction";
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const token = localStorage.getItem("token");
 
@@ -118,12 +123,9 @@ export function CommentSystem({
   useEffect(() => {
     const fetchEmojis = async () => {
       try {
-        const response = await fetch(
-          getAllReact,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const response = await fetch(getAllReact, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!response.ok) throw new Error("Failed to fetch emojis");
         const data = await response.json();
         if (data.success && Array.isArray(data.data)) {
@@ -164,6 +166,25 @@ export function CommentSystem({
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    const refresh = () => fetchComments();
+    window.addEventListener("refreshComments", refresh);
+    return () => window.removeEventListener("refreshComments", refresh);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        mentionRef.current &&
+        !mentionRef.current.contains(event.target as Node)
+      ) {
+        setShowMentions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // ✅ Fetch comments
   const fetchComments = async () => {
     setLoading(true); // ensure starts in loading
@@ -179,7 +200,7 @@ export function CommentSystem({
             id: `c${c.CommentID}`,
             content: c.CommentText,
             author: c.UserName,
-            createdAt: c.CreatedDate,
+            CreatedDate: c.CreatedDate,
             parentId: c.ParentID ? `c${c.ParentID}` : undefined,
             mentions: c.MentionedUsersInfo || [],
             attachments: [],
@@ -188,7 +209,8 @@ export function CommentSystem({
           }))
           .sort(
             (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              new Date(b.CreatedDate).getTime() -
+              new Date(a.CreatedDate).getTime()
           );
         setComments(mapped);
       }
@@ -309,57 +331,156 @@ export function CommentSystem({
 
   // ✅ Reaction
   // ✅ Handle emoji reaction and sync with backend
+  // const handleReaction = async (commentId: string, emoji: string) => {
+  //   if (!currentUser || !token) return;
+
+  //   try {
+  //     const selectedEmoji = emojis.find((e) => e.EmojiName === emoji);
+  //     if (!selectedEmoji) return;
+
+  //     const payload = {
+  //       CommentID: parseInt(commentId.replace("c", "")),
+  //       R_Id: selectedEmoji.R_Id,
+  //     };
+
+  //     const response = await fetch(reactCommentUrl, {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${token}`,
+  //       },
+  //       body: JSON.stringify(payload),
+  //     });
+
+  //     const data = await response.json();
+
+  //     if (data.success) {
+  //       // ✅ Update comment reactions using existing count
+  //       setComments((prev) =>
+  //         prev.map((c) => {
+  //           if (c.id === commentId) {
+  //             const existing = c.reactions.find((r) => r.emoji === emoji);
+  //             if (existing) existing.count += 1;
+  //             else c.reactions.push({ emoji, count: 1 });
+  //           }
+  //           return { ...c };
+  //         })
+  //       );
+  //     } else {
+  //       toast({ title: "Failed to react", variant: "destructive" });
+  //     }
+  //   } catch (err) {
+  //     console.error(err);
+  //   }
+  // };
+
   const handleReaction = async (commentId: string, emoji: string) => {
     if (!currentUser || !token) return;
 
+    const selectedEmoji = emojis.find((e) => e.EmojiName === emoji);
+    if (!selectedEmoji) return;
+
+    const numericCommentId = parseInt(commentId.replace("c", ""));
+    const r_id = selectedEmoji.R_Id;
+    const user_id = currentUser.id; // ✅ fixed
+
     try {
-      const selectedEmoji = emojis.find((e) => e.EmojiName === emoji);
-      if (!selectedEmoji) return;
-
-      const payload = {
-        CommentID: parseInt(commentId.replace("c", "")),
-        R_Id: selectedEmoji.R_Id,
-      };
-
-      const response = await fetch(reactCommentUrl, {
+      // Step 1: Try to delete reaction (toggle off)
+      const delResponse = await fetch(deleteReactUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          CommentID: numericCommentId,
+          R_Id: r_id,
+          UserID: user_id, // ✅ fixed
+        }),
       });
 
-      const data = await response.json();
+      const delData = await delResponse.json();
 
-      if (data.success) {
-        // ✅ Update comment reactions using existing count
+      if (delResponse.ok && delData.success) {
+        // ✅ Successfully removed reaction
         setComments((prev) =>
           prev.map((c) => {
             if (c.id === commentId) {
-              const existing = c.reactions.find((r) => r.emoji === emoji);
-              if (existing) existing.count += 1;
-              else c.reactions.push({ emoji, count: 1 });
+              const updatedReactions = c.reactions
+                .map((r) =>
+                  r.emoji === emoji ? { ...r, count: r.count - 1 } : r
+                )
+                .filter((r) => r.count > 0);
+              return { ...c, reactions: updatedReactions };
             }
-            return { ...c };
+            return c;
           })
         );
-      } else {
-        toast({ title: "Failed to react", variant: "destructive" });
+        return;
+      }
+
+      // Step 2: If no matching reaction, add it
+      if (delData.message?.includes("No matching reaction")) {
+        const addResponse = await fetch(reactCommentUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            CommentID: numericCommentId,
+            R_Id: r_id,
+            UserID: user_id, // ✅ fixed
+          }),
+        });
+
+        const addData = await addResponse.json();
+
+        if (addResponse.ok && addData.success) {
+          setComments((prev) =>
+            prev.map((c) => {
+              if (c.id === commentId) {
+                const existing = c.reactions.find((r) => r.emoji === emoji);
+                if (existing) existing.count += 1;
+                else c.reactions.push({ emoji, count: 1 });
+              }
+              return { ...c };
+            })
+          );
+        } else {
+          toast({ title: "Failed to react", variant: "destructive" });
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.error("Error toggling reaction:", err);
     }
   };
 
-  const commentTree = comments.reduce((tree: Record<string, Comment>, c) => {
-    if (!c.parentId) tree[c.id] = { ...c, replies: [] };
-    else if (tree[c.parentId]) tree[c.parentId].replies!.push(c);
-    else tree[c.id] = { ...c, replies: [] };
-    return tree;
-  }, {} as Record<string, Comment>);
+  // ✅ Build full threaded comment tree safely (order-independent)
+  const buildCommentTree = (flatComments: Comment[]) => {
+    const map: Record<string, Comment> = {};
+    const roots: Comment[] = [];
 
-  const rootComments = Object.values(commentTree);
+    // First pass: initialize map
+    flatComments.forEach((c) => {
+      map[c.id] = { ...c, replies: [] };
+    });
+
+    // Second pass: attach children
+    flatComments.forEach((c) => {
+      if (c.parentId && map[c.parentId]) {
+        map[c.parentId].replies!.push(map[c.id]);
+      } else {
+        roots.push(map[c.id]);
+      }
+    });
+
+    return roots;
+  };
+
+  // Then replace your previous section with:
+  const rootComments = buildCommentTree(comments);
+
   console.log({
     loading,
     usersLoading,
@@ -397,7 +518,7 @@ export function CommentSystem({
             <Send className="w-4 h-4 text-blue-600" />
           </div>
 
-          <div className="flex-1 space-y-2 relative">
+          <div ref={mentionRef}  className="flex-1 space-y-2 relative">
             <Textarea
               ref={textareaRef}
               placeholder="Add a comment... Use @username to mention team members"
@@ -407,7 +528,7 @@ export function CommentSystem({
             />
 
             {/* Mentions dropdown */}
-            {showMentions && users.length > 0 && (
+            {/* {showMentions && users.length > 0 && (
               <Card className="absolute top-full left-0 mt-1 w-64 bg-popover border-border shadow-elevated z-50">
                 <CardContent className="p-2">
                   {users.slice(0, 5).map((member) => (
@@ -426,21 +547,26 @@ export function CommentSystem({
                   ))}
                 </CardContent>
               </Card>
-            )}
-
-            {/* Replying to */}
-            {replyingTo && (
-              <div className="ml-2 text-xs text-primary bg-primary/10 p-2 rounded-md">
-                Replying to comment...
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="ml-2 h-6 px-2"
-                  onClick={() => setReplyingTo(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
+            )} */}
+            {showMentions && users.length > 0 && (
+              <Card className="absolute top-full left-0 mt-1 w-64 bg-popover border-border shadow-elevated z-50 max-h-48 overflow-y-auto hide-scrollbar">
+                <CardContent className="p-2">
+                  {users.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer"
+                      onClick={() => handleMentionSelect(member)}
+                    >
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback>{member.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="text-sm font-medium truncate">
+                        {member.name}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
             )}
 
             <div className="flex justify-between items-center">
@@ -526,27 +652,64 @@ function CommentItem({
     setIsPopoverOpen(false);
   };
 
-  const handleReplySubmit = () => {
-    if (!replyText.trim() || !setReplyingTo) return;
-    setReplyingTo(comment.id); // set parent
-    const event = new Event("submitReply"); // simple trigger
-    document.dispatchEvent(event);
-    setReplyText(""); // clear input
-    setShowReplyBox(false);
+  // const handleReplySubmit = () => {
+  //   if (!replyText.trim() || !setReplyingTo) return;
+  //   setReplyingTo(comment.id); // set parent
+  //   const event = new Event("submitReply"); // simple trigger
+  //   document.dispatchEvent(event);
+  //   setReplyText(""); // clear input
+  //   setShowReplyBox(false);
+  // };
+
+  const handleReplySubmit = async () => {
+    if (!replyText.trim()) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const payload = {
+        CommentText: replyText,
+        ParentID: parseInt(comment.id.replace("c", "")), // ✅ numeric parent id
+        MentionedUserIDs: [],
+      };
+
+      const response = await fetch("https://orbis-backend-usfo.onrender.com/api/add-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({ title: "Reply added!" });
+        setReplyText("");
+        setShowReplyBox(false);
+        window.dispatchEvent(new Event("refreshComments")); // ✅ refresh
+      } else {
+        toast({ title: "Error posting reply", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Network error", variant: "destructive" });
+    }
   };
 
   return (
-    <div className="border-t pt-4 pl-4">
+    <div className="mt-4 border-t pt-4 pl-4">
       <div className="flex items-start gap-2">
-        <Avatar className="w-8 h-8">
-          <AvatarFallback>{comment.author?.[0] || "?"}</AvatarFallback>
+        <Avatar className="w-8 h-8 bg-blue-100 border border-border flex items-center justify-center">
+          <AvatarFallback className="text-blue-700 font-medium">
+            {comment.author?.[0]?.toUpperCase() || "?"}
+          </AvatarFallback>
         </Avatar>
 
         <div className="flex-1">
           <div className="font-medium">{comment.author}</div>
           <div className="text-xs text-muted-foreground">
-            {getTimeAgo(comment.createdAt)}
+            {getTimeAgo(comment.CreatedDate)}
           </div>
+
           <p className="text-sm mt-1">{comment.content}</p>
 
           <div className="flex items-center gap-2 mt-2">
@@ -580,6 +743,7 @@ function CommentItem({
                 size="sm"
                 variant="secondary"
                 className="h-7 px-2 text-xs"
+                onClick={() => handleReaction(comment.id, r.emoji)} // ← Make reaction button clickable
               >
                 {r.emoji} {r.count}
               </Button>
@@ -602,44 +766,62 @@ function CommentItem({
               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                 <Send className="w-4 h-4 text-blue-600" />
               </div>
-              <div className="flex-1 space-y-2 relative">
+              <div className="flex items-center w-full gap-2">
+                {/* Textarea (takes full width) */}
                 <Textarea
                   placeholder={`Reply to ${comment.author}...`}
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  className="h-8 min-h-5 p-1 px-3 bg-muted border-border resize-none"
+                  className="flex-1 h-10 min-h-0 p-1 px-3 bg-muted border-border resize-none"
                 />
 
-                <div className="flex justify-between items-center mt-1">
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline">
-                      <Paperclip className="w-3 h-3 mr-1" /> Attach
-                    </Button>
-                    <Button size="sm" variant="outline">
-                      <AtSign className="w-3 h-3 mr-1" /> Mention
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={handleReplySubmit}
-                      disabled={!replyText.trim()}
-                    >
-                      {/* <Send className="w-3 h-3 mr-1" />  */}
-                      Reply
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setShowReplyBox(false);
-                        setReplyText("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
+                {/* Buttons aligned to the right */}
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleReplySubmit}
+                    disabled={!replyText.trim()}
+                  >
+                    Reply
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowReplyBox(false);
+                      setReplyText("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button size="sm" variant="ghost" className="h-7 px-2">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-32 p-2 bg-popover border-border z-50">
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="justify-start"
+                        >
+                          <Paperclip className="w-3 h-3 mr-2" /> Attach
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="justify-start"
+                        >
+                          <AtSign className="w-3 h-3 mr-2" /> Mention
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
             </div>

@@ -53,8 +53,17 @@ def add_comment(user_id, user_name):
     JWT provides user_id and user_name.
     """
     data = request.json
+    print("💡 Incoming payload:", data)
     comment_text = data.get("CommentText")
     parent_id = data.get("ParentID")
+    if parent_id:
+        try:
+            parent_id = int(parent_id)
+        except:
+            parent_id = None
+    else:
+        parent_id = None
+
     mentioned_user_ids = data.get("MentionedUserIDs")
 
     if not comment_text:
@@ -203,4 +212,61 @@ def react_comment_route(user_id, user_name):
         return jsonify({"success": True, "message": message})
     else:
         return jsonify({"success": False, "message": message}), 500
+
+def delete_reaction(comment_id, user_id, r_id):
+    """
+    Deletes a user's specific emoji reaction from a comment.
+    Only the same user who reacted can remove it.
+    """
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    try:
+        # Check first if this reaction exists and belongs to the same user
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM santova.UserReactMapping 
+            WHERE CommentID = %s AND UserID = %s AND R_Id = %s
+        """, (comment_id, user_id, r_id))
+        count = cursor.fetchone()[0]
+
+        if count == 0:
+            return False, "No matching reaction found for this user."
+
+        # ✅ Execute delete SP
+        cursor.execute(
+            "EXEC santova.DeleteReact @CommentID=%s, @UserID=%s, @R_Id=%s",
+            (comment_id, user_id, r_id)
+        )
+
+        conn.commit()
+        return True, "Reaction deleted successfully."
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@discussion_bp.route("/api/delete-reaction", methods=["POST"])
+@token_required
+def delete_reaction_route(user_id, user_name):
+    """
+    Deletes a specific emoji reaction made by the logged-in user.
+    Body JSON: { "CommentID": 1, "R_Id": 2 }
+    """
+    data = request.json
+    comment_id = data.get("CommentID")
+    user_id = data.get("UserID")
+    r_id = data.get("R_Id")
+
+    if not comment_id or not r_id:
+        return jsonify({"success": False, "message": "CommentID and R_Id are required"}), 400
+
+    success, message = delete_reaction(comment_id, user_id, r_id)
+    if success:
+        return jsonify({"success": True, "message": message}), 200
+    else:
+        return jsonify({"success": False, "message": message}), 400
+
 

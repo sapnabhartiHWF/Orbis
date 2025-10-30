@@ -9,7 +9,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const url = "http://127.0.0.1:8000/api/auth/login";
+  const url = "https://orbis-backend-usfo.onrender.com/api/auth/login";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

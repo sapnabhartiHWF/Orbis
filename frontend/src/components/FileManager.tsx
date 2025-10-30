@@ -64,10 +64,10 @@ interface FileManagerProps {
 
 const fileTypes = ["all", "document", "video", "flowchart", "image"];
 const staticTags = ["demo", "current-state", "training"];
-const url = "https://newsantova.onrender.com/api/processes";
-const uploadUrl = "https://newsantova.onrender.com/api/file-management";
-const dataUrl = "https://newsantova.onrender.com/api/uploaded-details";
-const deleteUrl = "https://newsantova.onrender.com/api/delete-uploaded-file";
+const url = "https://orbis-backend-usfo.onrender.com/api/processes";
+const uploadUrl = "https://orbis-backend-usfo.onrender.com/api/file-management";
+const dataUrl = "https://orbis-backend-usfo.onrender.com/api/uploaded-details";
+const deleteUrl = "https://orbis-backend-usfo.onrender.com/api/delete-uploaded-file";
 
 export function FileManager({ processId }: FileManagerProps) {
   const [files, setFiles] = useState<FileUpload[]>([]);
