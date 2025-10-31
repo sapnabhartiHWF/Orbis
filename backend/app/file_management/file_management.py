@@ -1,51 +1,107 @@
 from flask import Blueprint, request, jsonify, current_app
 from app.Database.connection import connect_to_database
 from app.auth_middleware import token_required
+import os
+from werkzeug.utils import secure_filename
+from flask import send_file
 
 file_bp = Blueprint("file_bp", __name__)
 
-def insert_file_to_db(user_id, process_id, file_name, file_type, file_size, file_format, description=None):
+UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
+ALLOWED_EXTENSIONS = {
+    # Documents
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt",
+
+    # Images
+    "jpg", "jpeg", "png", "gif", "bmp", "tiff", "svg","jfif",
+
+    # Videos
+    "mp4", "mov", "avi", "mkv", "webm",
+
+    # Flowcharts / Design files
+    "drawio", "vsdx", "svg", "xml", "psd", "ai", "flowchart", "diagram"
+}
+
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@file_bp.route("/api/file-management", methods=["POST"])
+@token_required
+def upload_file_route(user_id, user_name):
     """
-    Inserts a file record into the database via stored procedure.
-    Returns (new_file_id, uploaded_by_name) if successful.
+    Uploads a file and saves metadata to DB
     """
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    process_id = request.form.get("ProcessID")
+    description = request.form.get("Description")
+    file_type = request.form.get("FileType")  # ✅ dropdown-selected type (e.g. Document, Image, Video, etc.)
+
+    if not file or file.filename == "":
+        return jsonify({"success": False, "message": "No file selected"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"success": False, "message": "File type not allowed"}), 400
+
+    filename = secure_filename(file.filename)
+    file_format = filename.rsplit(".", 1)[1].lower()
+    mime_type = file.content_type 
+    file_size = len(file.read())
+    file.seek(0)
+
+    # Folder path: uploads/user_<id>/
+    user_folder = os.path.join(UPLOAD_FOLDER, f"user_{user_id}")
+    os.makedirs(user_folder, exist_ok=True)
+    file_path = os.path.join(user_folder, filename)
+    file.save(file_path)
+
     conn = connect_to_database()
     cursor = conn.cursor()
+
     try:
-        sql = """
-        EXEC santova.InsertFileData
-            @UserID = %s,
-            @ProcessID = %s,
-            @FileName = %s,
-            @FileType = %s,
-            @FileSize = %s,
-            @FileFormat = %s,
-            @Description = %s
-        """
-        cursor.execute(sql, (
+        cursor.execute("""
+            EXEC santova.InsertFileData
+                @UserID = %s,
+                @ProcessID = %s,
+                @FileName = %s,
+                @FileType = %s, 
+                @MimeType = %s,
+                @FileSize = %s,
+                @FileFormat = %s,
+                @Description = %s,
+                @FilePath = %s
+        """, (
             user_id,
             process_id,
-            file_name,
+            filename,
             file_type,
+            mime_type,
             file_size,
             file_format,
-            description if description else None
+            description,
+            file_path
         ))
 
+        # ✅ Fetch output from SP (FileID + UploadedByName)
         result = cursor.fetchone()
-        if not result:
-            raise Exception("No result returned from stored procedure")
-
-        new_file_id = result[0]
-        uploaded_by_name = result[1] if len(result) > 1 else "Unknown User"
+        new_file_id = result[0] if result else None
+        uploaded_by_name = result[1] if result and len(result) > 1 else user_name
 
         conn.commit()
-        return new_file_id, uploaded_by_name
+
+        return jsonify({
+            "success": True,
+            "message": "File uploaded successfully",
+            "NewFileID": new_file_id,
+            "UploadedByName": uploaded_by_name
+        }), 201
 
     except Exception as e:
         conn.rollback()
-        raise e
-
+        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -129,41 +185,6 @@ def delete_file(file_id: int, user_id: int):
 
 # 🌐 ROUTES (JWT-Protected)
 
-@file_bp.route('/api/file-management', methods=['POST'])
-@token_required  # ✅ Requires valid JWT
-def insert_file_route(user_id, user_name):
-    """
-    Route to handle file upload metadata insert.
-    JWT gives user_id and user_name.
-    """
-    data = request.json
-    required_fields = ['ProcessID', 'FileName', 'FileType', 'FileSize', 'FileFormat']
-
-    for field in required_fields:
-        if field not in data or not data[field]:
-            return jsonify({'success': False, 'message': f'{field} is required'}), 400
-
-    try:
-        new_file_id, uploaded_by_name = insert_file_to_db(
-            user_id=user_id,
-            process_id=data['ProcessID'],
-            file_name=data['FileName'],
-            file_type=data['FileType'],
-            file_size=data['FileSize'],
-            file_format=data['FileFormat'],
-            description=data.get('Description')
-        )
-
-        return jsonify({
-            'success': True,
-            'NewFileID': new_file_id,
-            'UploadedByName': uploaded_by_name or user_name
-        })
-
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-
 @file_bp.route('/api/uploaded-details', methods=['GET'])
 @token_required  # ✅ Protect this route too
 def get_files_route(user_id, user_name):
@@ -215,4 +236,53 @@ def delete_file_route(user_id, user_name):
     status_code = 200 if success else 403  # 403 Forbidden if not allowed
     current_app.logger.info(f"Delete request for FileID={file_id} by UserID={user_id} => {message}")
     return jsonify({"Success": success, "Message": message}), status_code
+
+# download uploaded files
+
+@file_bp.route("/api/download-file/<int:file_id>", methods=["GET"])
+@token_required
+def download_file_route(user_id, user_name, file_id):
+    """
+    Downloads a file from the uploads folder based on DB record.
+    """
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT FileName, FileFormat, FilePath
+            FROM santova.FileManagement
+            WHERE FileID = %s AND IsDeleted = 0
+        """, (file_id,))
+        file_row = cursor.fetchone()
+
+        if not file_row:
+            return jsonify({"success": False, "message": "File not found"}), 404
+            
+        print(file_row)
+
+        file_name, file_format, file_path = file_row
+
+        if not os.path.exists(file_path):
+            return jsonify({"success": False, "message": "File missing from server"}), 404
+
+        cursor.execute("""
+            UPDATE santova.FileManagement
+            SET DownloadCount = ISNULL(DownloadCount, 0) + 1
+            WHERE FileID = %s
+        """, (file_id,))
+        conn.commit()
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=f"{file_name}.{file_format}",
+            mimetype="application/octet-stream"
+        )
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 

@@ -18,6 +18,7 @@ import {
   Search,
   Grid,
   List,
+  Copy,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ const staticTags = ["demo", "current-state", "training"];
 const url = "https://orbis-backend-usfo.onrender.com/api/processes";
 const uploadUrl = "https://orbis-backend-usfo.onrender.com/api/file-management";
 const dataUrl = "https://orbis-backend-usfo.onrender.com/api/uploaded-details";
-const deleteUrl = "https://orbis-backend-usfo.onrender.com/api/delete-uploaded-file";
+const deleteUrl ="https://orbis-backend-usfo.onrender.com/api/delete-uploaded-file";
 
 export function FileManager({ processId }: FileManagerProps) {
   const [files, setFiles] = useState<FileUpload[]>([]);
@@ -197,21 +198,19 @@ export function FileManager({ processId }: FileManagerProps) {
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
       try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("ProcessID", uploadProcessId);
+        formData.append("FileType", uploadFileType);
+        formData.append("Description", uploadDescription || "");
+        formData.append("UploadedBy", userId);
+
         const res = await fetch(uploadUrl, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            ProcessID: uploadProcessId,
-            FileName: file.name,
-            FileType: uploadFileType,
-            FileSize: file.size,
-            FileFormat: file.name.split(".").pop(),
-            Description: uploadDescription,
-            UploadedBy: localStorage.getItem("userId"),
-          }),
+          body: formData,
         });
 
         const data = await res.json();
@@ -289,7 +288,7 @@ export function FileManager({ processId }: FileManagerProps) {
       window.location.href = "/login";
       return;
     }
-  
+
     try {
       const res = await fetch(deleteUrl, {
         method: "POST",
@@ -299,9 +298,9 @@ export function FileManager({ processId }: FileManagerProps) {
         },
         body: JSON.stringify({ FileID: Number(fileId) }),
       });
-  
+
       const data = await res.json();
-  
+
       // ✅ Check success
       if (!res.ok || !data.Success) {
         toast({
@@ -310,10 +309,10 @@ export function FileManager({ processId }: FileManagerProps) {
         });
         return;
       }
-  
+
       // ✅ Remove deleted file from state immediately
       setFiles((prev) => prev.filter((f) => Number(f.id) !== Number(fileId)));
-  
+
       toast({
         title: "File deleted",
         description: data.Message || "The file has been removed.",
@@ -323,6 +322,53 @@ export function FileManager({ processId }: FileManagerProps) {
       toast({ title: "Delete failed", description: "Network/server error" });
     }
   };
+
+  const handleDownload = async (file) => {
+    try {
+      const token = localStorage.getItem("token"); // or however you store it
+  
+      if (!file.FileID && !file.id) {
+        console.error("FileID missing:", file);
+        alert("File ID is missing!");
+        return;
+      }
+  
+      // Use FileID or id (depending on your backend response)
+      const fileId = file.FileID || file.id;
+  
+      const response = await fetch(
+        `https://orbis-backend-usfo.onrender.com/api/download-file/${fileId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+  
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+  
+      // Convert response to blob
+      const blob = await response.blob();
+  
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${file.name || "download"}.${file.format || "bin"}`;
+      document.body.appendChild(a);
+      a.click();
+  
+      // Cleanup
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      alert("Error downloading file. Please try again.");
+    }
+  };  
 
   const getStatusIcon = (status: FileUpload["status"]) => {
     switch (status) {
@@ -348,6 +394,30 @@ export function FileManager({ processId }: FileManagerProps) {
       case "error":
         return "text-destructive";
     }
+  };
+
+  const humanizeFileType = (
+    rawType: string | undefined,
+    format: string | undefined
+  ): string => {
+    if (!rawType) return format ? format.toUpperCase() : "Unknown";
+    const simple = ["document", "video", "flowchart", "image"];
+    if (simple.includes(rawType))
+      return rawType.charAt(0).toUpperCase() + rawType.slice(1);
+
+    if (rawType.includes("/")) {
+      const parts = rawType.split("/");
+      const subtype = parts[1] || parts[0];
+      const cleaned = subtype.replace(/[.+-]/g, " ");
+      const words = cleaned
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 4)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      return words || (format ? format.toUpperCase() : rawType);
+    }
+    return rawType;
   };
 
   return (
@@ -721,7 +791,8 @@ export function FileManager({ processId }: FileManagerProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={file.status !== "ready"}
+                        // disabled={file.status !== "ready"}
+                        disabled={isUploading}
                         onClick={() => setSelectedFile(file)}
                       >
                         <Eye className="w-3 h-3 mr-1" />
@@ -731,7 +802,9 @@ export function FileManager({ processId }: FileManagerProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={file.status !== "ready"}
+                        // disabled={file.status !== "ready"}
+                        disabled={isUploading}
+                        onClick={() => handleDownload(file)}
                       >
                         <Download className="w-3 h-3 mr-1" />
                         {viewMode === "list" ? "" : "Download"}
@@ -771,61 +844,106 @@ export function FileManager({ processId }: FileManagerProps) {
 
       {/* File Details Dialog */}
       <Dialog open={!!selectedFile} onOpenChange={() => setSelectedFile(null)}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedFile?.name}</DialogTitle>
-            <DialogDescription>File Details</DialogDescription>
+            <DialogTitle className="flex items-center gap-3">
+              <span className="inline-flex w-9 h-9 rounded-md bg-primary/10 items-center justify-center text-xl">
+                {selectedFile && getFileTypeIcon(selectedFile.format)}
+              </span>
+              <span className="truncate" title={selectedFile?.name}>
+                {selectedFile?.name}
+              </span>
+            </DialogTitle>
+            <DialogDescription className="flex flex-wrap gap-2 items-center">
+              {selectedFile && (
+                <>
+                  <span className="inline-flex items-center gap-2 text-xs">
+                    {getStatusIcon(selectedFile.status)}
+                    <span className={getStatusColor(selectedFile.status)}>
+                      {selectedFile.status.charAt(0).toUpperCase() +
+                        selectedFile.status.slice(1)}
+                    </span>
+                  </span>
+                  <span className="text-muted-foreground">•</span>
+                  <span className="text-xs uppercase tracking-wide">
+                    {selectedFile.format}
+                  </span>
+                  <span className="text-muted-foreground">•</span>
+                  <span className="text-xs">{formatFileSize(selectedFile.size)}</span>
+                  {selectedFile.version > 1 && (
+                    <Badge variant="secondary" className="text-xs">v{selectedFile.version}</Badge>
+                  )}
+                </>
+              )}
+            </DialogDescription>
           </DialogHeader>
           {selectedFile && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <strong>Status:</strong>
-                <span className={getStatusColor(selectedFile.status)}>
-                  {selectedFile.status.charAt(0).toUpperCase() +
-                    selectedFile.status.slice(1)}
-                </span>
-                {getStatusIcon(selectedFile.status)}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-gray-300 p-4 bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-1">Type</p>
+                  <p className="font-medium truncate" title={String(selectedFile.type)}>
+                    {humanizeFileType(selectedFile.type as any, selectedFile.format)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-300 p-4 bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-1">Process</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate" title={String(selectedFile.processName)}>
+                        {selectedFile.processName || "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">ID: {selectedFile.processId || "—"}</p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="shrink-0"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(String(selectedFile.processId || ""));
+                          toast({ title: "Copied", description: "Process ID copied to clipboard" });
+                        } catch {
+                          toast({ title: "Copy failed", description: "Could not copy Process ID" });
+                        }
+                      }}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-300 p-4 bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-1">Uploaded By</p>
+                  <p className="font-medium flex items-center gap-2"><User className="w-4 h-4" />{selectedFile.uploadedBy}</p>
+                </div>
+                <div className="rounded-lg border border-gray-300 p-4 bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-1">Uploaded At</p>
+                  <div className="font-medium flex items-start gap-2">
+                    <Clock className="w-4 h-4 mt-0.5" />
+                    <div className="min-w-0">
+                      <div>{getTimeAgo(selectedFile.uploadedAt)}</div>
+                      <div className="text-xs text-muted-foreground truncate">{new Date(selectedFile.uploadedAt).toLocaleString()}</div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p>
-                <strong>Type:</strong>{" "}
-                {selectedFile.type.charAt(0).toUpperCase() +
-                  selectedFile.type.slice(1)}
-              </p>
-              <p>
-                <strong>Format:</strong> {selectedFile.format.toUpperCase()}
-              </p>
-              <p>
-                <strong>Size:</strong> {formatFileSize(selectedFile.size)}
-              </p>
-              <p>
-                <strong>Version:</strong> {selectedFile.version}
-              </p>
-              <p>
-                <strong>Process ID:</strong> {selectedFile.processId}
-              </p>
-              <p>
-                <strong>Process Name:</strong> {selectedFile.processName}
-              </p>
-              <p>
-                <strong>Uploaded By:</strong> {selectedFile.uploadedBy}
-              </p>
-              <p>
-                <strong>Uploaded At:</strong>{" "}
-                {getTimeAgo(selectedFile.uploadedAt)} (
-                {new Date(selectedFile.uploadedAt).toLocaleString()})
-              </p>
+
               <div>
-                <strong>Description:</strong>
-                <p className="text-muted-foreground">
-                  {selectedFile.description || "No description provided"}
-                </p>
+                <p className="text-xs text-muted-foreground mb-2">Description</p>
+                <div className="rounded-lg border border p-4 bg-background/50">
+                  <p className="text-sm text-muted-foreground whitespace-pre-line">
+                    {selectedFile.description || "No description provided"}
+                  </p>
+                </div>
               </div>
+
               <div>
-                <strong>Tags:</strong>
-                <div className="flex flex-wrap gap-2 mt-1">
+                <p className="text-xs text-muted-foreground mb-2">Tags</p>
+                <div className="flex flex-wrap gap-2">
                   {selectedFile.tags.length > 0 ? (
                     selectedFile.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary">
+                      <Badge key={tag} variant="secondary" className="inline-flex items-center">
+                        <Tag className="w-3 h-3 mr-1" />
                         {tag}
                       </Badge>
                     ))
