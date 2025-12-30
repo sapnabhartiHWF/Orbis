@@ -26,7 +26,8 @@ interface ReportTemplate {
   downloads: number
 }
 
-const reportTemplates: ReportTemplate[] = [
+const reportTemplates: ReportTemplate[] = []
+/* [
   {
     id: "exec-dashboard",
     name: "Executive Dashboard Summary",
@@ -92,9 +93,10 @@ const reportTemplates: ReportTemplate[] = [
     size: "1.8 MB",
     downloads: 256
   }
-]
+] */
 
-const scheduledReports = [
+const scheduledReports = []
+/* [
   {
     id: "sched-1",
     template: "Executive Dashboard Summary",
@@ -119,15 +121,16 @@ const scheduledReports = [
     nextRun: "2024-09-30T17:00:00",
     status: "paused"
   }
-]
+] */
 
-const exportHistory = [
+const exportHistory = []
+/* [
   { date: "2024-06-26", report: "Executive Dashboard Summary", format: "PDF", user: "John Smith", size: "2.4 MB" },
   { date: "2024-06-26", report: "Technical Performance Metrics", format: "CSV", user: "Sarah Chen", size: "1.8 MB" },
   { date: "2024-06-25", report: "Team Performance Report", format: "PDF", user: "Michael Rodriguez", size: "5.2 MB" },
   { date: "2024-06-25", report: "Process Performance Analytics", format: "Excel", user: "Emma Thompson", size: "8.7 MB" },
   { date: "2024-06-24", report: "Executive Dashboard Summary", format: "PDF", user: "David Park", size: "2.4 MB" }
-]
+] */
 
 export function ExportCapabilities() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)

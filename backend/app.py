@@ -8,6 +8,15 @@ from app.discussion import discussion_bp
 from dotenv import load_dotenv
 import os
 from app.User import user_bp
+from app.TeamAssignment import team_assignment_bp
+from app.Operations.operationapi import operation_bp
+from app.Tickets import tickets_bp
+from app.exception_managemt.create_exception_endpoint import exception_blueprint
+from app.Bots.Bots import bots_bp
+from app.center_of_excellence.process_registration import process_registration_bp
+from app.center_of_excellence.download_apis import download_bp
+from app.center_of_excellence import update_stages
+from app.insert_bwi_data.insert_bwi_endpoint import insert_bwi_blueprint
 
 load_dotenv()
 app = Flask(__name__)
@@ -24,14 +33,17 @@ CORS(app, resources={
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:5173",
-            "http://localhost:8080",
+             "http://localhost:8080",
+            "http://127.0.0.1:8080",
             "http://192.168.29.23:8080",
             "https://icatui-b74o.onrender.com",
             "https://newsantova.onrender.com",
             "http://192.168.29.65:8080",
+            "http://172.26.80.1:8080/",
             "http://172.25.224.1:8080/",
             "http://172.23.208.1:8080/",
-            "https://orbis-demo.alphalogix.tech"
+            "https://orbis-santova.alphalogix.tech",
+            "https://orbis-icat.alphalogix.tech"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
@@ -45,20 +57,23 @@ def add_cors_headers(response):
     allowed_origins = [
         "http://192.168.29.65:8080",
         "http://localhost:8080",
-        "https://orbis-demo.alphalogix.tech",
-        "https://newsantova.onrender.com"
+        "http://127.0.0.1:8080",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "https://orbis-santova.alphalogix.tech",
+        "https://newsantova.onrender.com",
+        "https://orbis-icat.alphalogix.tech"
     ]
     if origin in allowed_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    # Handle preflight requests
+    if request.method == "OPTIONS":
+        response.status_code = 200
     return response
-
-# Debug route for testing headers (optional)
-@app.route("/api/debug-session")
-def debug_session():
-    return jsonify({"message": "JWT mode active, session not used"})
 
 # Register Blueprints
 app.register_blueprint(rulebook_blueprint, url_prefix='/rulebook')
@@ -67,6 +82,13 @@ app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(file_bp)
 app.register_blueprint(discussion_bp)
 app.register_blueprint(user_bp)
-
+app.register_blueprint(team_assignment_bp)
+app.register_blueprint(operation_bp)
+app.register_blueprint(tickets_bp)
+app.register_blueprint(exception_blueprint)
+app.register_blueprint(bots_bp)
+app.register_blueprint(process_registration_bp)
+app.register_blueprint(download_bp)
+app.register_blueprint(insert_bwi_blueprint)
 if __name__ == "__main__":
     app.run('0.0.0.0', debug=False, port=8000)

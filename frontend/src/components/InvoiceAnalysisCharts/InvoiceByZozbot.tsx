@@ -328,6 +328,18 @@ const InvoiceByZozbot = ({
                   bottom: 5,
                 }}
               >
+                <defs>
+                  {uniqueZozbots.map((zozbot, index) => {
+                    const color = COLORS[index % COLORS.length];
+                    const gradientId = `gradient-${zozbot.replace(/\s+/g, '-')}`;
+                    return (
+                      <linearGradient key={gradientId} id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={color} stopOpacity={1} />
+                        <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+                      </linearGradient>
+                    );
+                  })}
+                </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(var(--border))"
@@ -349,15 +361,19 @@ const InvoiceByZozbot = ({
                   }}
                 />
                 <Legend />
-                {uniqueZozbots.map((zozbot, index) => (
-                  <Bar
-                    key={zozbot}
-                    dataKey={zozbot}
-                    stackId="a"
-                    fill={COLORS[index % COLORS.length]}
-                    barSize={220}
-                  />
-                ))}
+                {uniqueZozbots.map((zozbot, index) => {
+                  const gradientId = `gradient-${zozbot.replace(/\s+/g, '-')}`;
+                  return (
+                    <Bar
+                      key={zozbot}
+                      dataKey={zozbot}
+                      stackId="a"
+                      fill={`url(#${gradientId})`}
+                      barSize={220}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  );
+                })}
               </BarChart>
           </ResponsiveContainer>
           )}

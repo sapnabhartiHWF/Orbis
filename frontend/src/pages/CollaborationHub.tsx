@@ -15,10 +15,10 @@ import { CollaborationHub as CollaborationHubComponent } from "@/components/Coll
 export default function CollaborationHub() {
   // Stats for the overview
   const collaborationStats = {
-    activeFiles: 24,
-    openDiscussions: 12,
-    pendingApprovals: 8,
-    teamMembers: 15
+    activeFiles: 0,
+    openDiscussions: 0,
+    pendingApprovals: 0,
+    teamMembers: 0
   }
 
   return (

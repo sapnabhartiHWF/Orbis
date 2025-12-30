@@ -59,7 +59,8 @@ import { DevSprintPlanner } from "@/components/DevSprintPlanner"
 import { useToast } from "@/hooks/use-toast"
 
 // Mock data for project cards
-const mockProjects = [
+const mockProjects = []
+/* [
   {
     id: "PROJ-001",
     title: "Multi-currency Expense Processing",
@@ -180,7 +181,7 @@ const mockProjects = [
     dueDate: "2024-03-01",
     epic: "Compliance"
   }
-]
+] */
 
 const columns = [
   { id: "backlog", title: "Backlog", color: "bg-muted" },
@@ -476,14 +477,14 @@ export default function Agile() {
             <p className="text-muted-foreground">Technical project management for automation development teams</p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="gap-2">
+            {/* <Button variant="outline" className="gap-2">
               <Clock className="w-4 h-4" />
               Sprint Planning
             </Button>
             <Button variant="outline" className="gap-2">
               <BarChart3 className="w-4 h-4" />
               Velocity Report
-            </Button>
+            </Button> */}
             <Button variant="outline" className="gap-2" onClick={() => {
               // In a real app, this would show a modal with linked processes
               toast({
@@ -739,15 +740,15 @@ export default function Agile() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Current Sprint</span>
-                        <span className="font-medium">47 points</span>
+                        <span className="font-medium">0 points</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Previous Sprint</span>
-                        <span className="font-medium">42 points</span>
+                        <span className="font-medium">0 points</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Average (6 sprints)</span>
-                        <span className="font-medium">44 points</span>
+                        <span className="font-medium">0 points</span>
                       </div>
                     </div>
                   </div>
@@ -757,15 +758,15 @@ export default function Agile() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Bug Rate</span>
-                        <span className="font-medium text-success">2.1%</span>
+                        <span className="font-medium text-success">0%</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Code Coverage</span>
-                        <span className="font-medium text-success">87%</span>
+                        <span className="font-medium text-success">0%</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Deploy Success</span>
-                        <span className="font-medium text-success">96%</span>
+                        <span className="font-medium text-success">0%</span>
                       </div>
                     </div>
                   </div>
@@ -775,15 +776,15 @@ export default function Agile() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Completion</span>
-                        <span className="font-medium text-success">On Track</span>
+                        <span className="font-medium text-success">N/A</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Sprint End</span>
-                        <span className="font-medium">Jan 26, 2024</span>
+                        <span className="font-medium">N/A</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-muted-foreground">Remaining</span>
-                        <span className="font-medium">8 days</span>
+                        <span className="font-medium">N/A</span>
                       </div>
                     </div>
                   </div>
@@ -807,7 +808,7 @@ export default function Agile() {
                       <div className="text-center space-y-2">
                         <Target className="w-8 h-8 text-primary mx-auto" />
                         <h3 className="font-semibold">Linked Processes</h3>
-                        <p className="text-2xl font-bold">12</p>
+                        <p className="text-2xl font-bold">0</p>
                         <p className="text-xs text-muted-foreground">Business processes</p>
                       </div>
                     </Card>
@@ -816,7 +817,7 @@ export default function Agile() {
                       <div className="text-center space-y-2">
                         <Clock className="w-8 h-8 text-warning mx-auto" />
                         <h3 className="font-semibold">Auto-Generated</h3>
-                        <p className="text-2xl font-bold">8</p>
+                        <p className="text-2xl font-bold">0</p>
                         <p className="text-xs text-muted-foreground">From COE pipeline</p>
                       </div>
                     </Card>
@@ -825,7 +826,7 @@ export default function Agile() {
                       <div className="text-center space-y-2">
                         <CheckCircle2 className="w-8 h-8 text-success mx-auto" />
                         <h3 className="font-semibold">Deployed</h3>
-                        <p className="text-2xl font-bold">5</p>
+                        <p className="text-2xl font-bold">0</p>
                         <p className="text-xs text-muted-foreground">Live in production</p>
                       </div>
                     </Card>
@@ -835,9 +836,9 @@ export default function Agile() {
                     <h3 className="font-semibold">Recent COE Handoffs</h3>
                     <div className="space-y-3">
                       {[
-                        { process: "Invoice Processing Automation", status: "In Development", devProject: "PROJ-002" },
-                        { process: "Employee Onboarding Bot", status: "Pending Development", devProject: null },
-                        { process: "Customer Data Reconciliation", status: "Deployed", devProject: "PROJ-004" }
+                        // { process: "Invoice Processing Automation", status: "In Development", devProject: "PROJ-002" },
+                        // { process: "Employee Onboarding Bot", status: "Pending Development", devProject: null },
+                        // { process: "Customer Data Reconciliation", status: "Deployed", devProject: "PROJ-004" }
                       ].map((item, index) => (
                         <div key={index} className="flex items-center justify-between p-4 border rounded-lg bg-card">
                           <div>

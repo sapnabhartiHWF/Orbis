@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { dummyROICalculations, assessRisk, RiskFactor } from "@/utils/roiCalculations"
+import { dummyROICalculations, assessRisk, RiskFactor, ROICalculation,  } from "@/utils/roiCalculations"
 
 interface RiskAnalysis {
   id: string
@@ -25,10 +25,10 @@ export function RiskAssessment() {
   const [selectedRiskLevel, setSelectedRiskLevel] = useState<string>("all")
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all")
   
-  const departments = Array.from(new Set(dummyROICalculations.map(calc => calc.department)))
+  const departments = Array.from(new Set(([] as ROICalculation[]).map(calc => calc.department))) // dummyROICalculations
   
   // Generate comprehensive risk analyses
-  const riskAnalyses: RiskAnalysis[] = dummyROICalculations.map(calc => {
+  const riskAnalyses: RiskAnalysis[] = ([] as ROICalculation[]).map(calc => {
     const investmentSize = Object.values(calc.implementationCosts).reduce((sum, cost) => sum + cost, 0)
     const riskFactors = assessRisk(calc)
     const overallRiskScore = calc.calculatedMetrics?.riskScore || 0

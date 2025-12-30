@@ -19,7 +19,7 @@ import { RiskAssessment } from "@/components/RiskAssessment"
 import { dummyROICalculations, calculateDepartmentROI, ROICalculation } from "@/utils/roiCalculations"
 
 export default function ROIAssessmentEngine() {
-  const [savedCalculations, setSavedCalculations] = useState<ROICalculation[]>(dummyROICalculations)
+  const [savedCalculations, setSavedCalculations] = useState<ROICalculation[]>([]) // dummyROICalculations
 
   // Calculate overview metrics
   const totalROI = savedCalculations.reduce((sum, calc) => {

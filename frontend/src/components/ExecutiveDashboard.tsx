@@ -17,7 +17,8 @@ interface ExecutiveMetric {
   color: string
 }
 
-const executiveMetrics: ExecutiveMetric[] = [
+const executiveMetrics: ExecutiveMetric[] = []
+/* [
   {
     title: "Total ROI",
     value: "4.2x",
@@ -72,34 +73,37 @@ const executiveMetrics: ExecutiveMetric[] = [
     icon: AlertCircle,
     color: "text-success"
   }
-]
+] */
 
-const kpiTrendData = [
+const kpiTrendData = []
+/* [
   { month: "Jan", roi: 3.2, savings: 180000, processes: 125, efficiency: 87 },
   { month: "Feb", roi: 3.5, savings: 210000, processes: 130, efficiency: 89 },
   { month: "Mar", roi: 3.8, savings: 240000, processes: 135, efficiency: 91 },
   { month: "Apr", roi: 4.0, savings: 265000, processes: 140, efficiency: 92 },
   { month: "May", roi: 4.1, savings: 285000, processes: 145, efficiency: 94 },
   { month: "Jun", roi: 4.2, savings: 300000, processes: 147, efficiency: 95 }
-]
+] */
 
-const departmentPerformance = [
+const departmentPerformance = []
+/* [
   { department: "Finance", automationRate: 85, savings: 680000, processes: 34, efficiency: 94 },
   { department: "Operations", automationRate: 78, savings: 520000, processes: 28, efficiency: 91 },
   { department: "HR", automationRate: 72, savings: 420000, processes: 22, efficiency: 89 },
   { department: "IT", automationRate: 90, savings: 380000, processes: 32, efficiency: 96 },
   { department: "Sales", automationRate: 68, savings: 340000, processes: 18, efficiency: 87 },
   { department: "Legal", automationRate: 55, savings: 220000, processes: 13, efficiency: 83 }
-]
+] */
 
-const businessImpactData = [
+const businessImpactData = []
+/* [
   { category: "Time Savings", value: 8760, unit: "hours/month", impact: "high" },
   { category: "FTE Capacity Released", value: 5.2, unit: "FTEs", impact: "high" },
   { category: "Customer Satisfaction", value: 4.7, unit: "/5.0", impact: "medium" },
   { category: "Compliance Score", value: 98.5, unit: "%", impact: "high" },
   { category: "Data Accuracy", value: 99.2, unit: "%", impact: "high" },
   { category: "Response Time", value: 2.3, unit: "minutes", impact: "medium" }
-]
+] */
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--accent))', 'hsl(var(--muted))']
 
@@ -314,7 +318,7 @@ export function ExecutiveDashboard() {
                 <div className="mt-2 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span>Progress</span>
-                    <span>68%</span>
+                    <span>0%</span>
                   </div>
                   <Progress value={68} className="h-2" />
                 </div>
@@ -329,7 +333,7 @@ export function ExecutiveDashboard() {
                 <div className="mt-2 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span>Progress</span>
-                    <span>45%</span>
+                    <span>0%</span>
                   </div>
                   <Progress value={45} className="h-2" />
                 </div>
@@ -344,7 +348,7 @@ export function ExecutiveDashboard() {
                 <div className="mt-2 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span>Progress</span>
-                    <span>92%</span>
+                    <span>0%</span>
                   </div>
                   <Progress value={92} className="h-2" />
                 </div>

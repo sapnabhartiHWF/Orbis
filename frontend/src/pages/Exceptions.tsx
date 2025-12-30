@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { 
   AlertTriangle, 
   Search, 
@@ -37,73 +37,113 @@ import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { createTicketFromException } from "@/utils/ticketExceptionIntegration"
 
-// Mock exception data
-const mockExceptions = [
-  {
-    id: "EXC-001",
-    timestamp: "2024-01-15 14:30:22",
-    process: "Invoice Processing",
-    botId: "BOT-INV-01",
-    exceptionType: "Validation Error",
-    rootCause: "Invalid vendor code format",
-    status: "open",
-    severity: "high",
-    description: "Vendor code 'ABC@123' contains invalid special characters",
-    impact: "Process halted, manual intervention required",
-    frequency: 15,
-    lastOccurrence: "2024-01-15 14:30:22",
-    resolution: null,
-    assignee: "Sarah Chen"
-  },
-  {
-    id: "EXC-002", 
-    timestamp: "2024-01-15 13:45:10",
-    process: "Customer Onboarding",
-    botId: "BOT-CRM-02",
-    exceptionType: "Data Missing",
-    rootCause: "Required field 'tax_id' not provided",
-    status: "investigating",
-    severity: "medium",
-    description: "Customer record missing mandatory tax identification number",
-    impact: "Onboarding delayed, customer notified",
-    frequency: 8,
-    lastOccurrence: "2024-01-15 13:45:10",
-    resolution: "Pending customer response",
-    assignee: "Mike Johnson"
-  },
-  {
-    id: "EXC-003",
-    timestamp: "2024-01-15 12:15:33",
-    process: "Report Generation",
-    botId: "BOT-RPT-03",
-    exceptionType: "System Error",
-    rootCause: "Database connection timeout",
-    status: "resolved",
-    severity: "low",
-    description: "Connection to analytics database timed out after 30 seconds",
-    impact: "Report generation delayed by 5 minutes",
-    frequency: 23,
-    lastOccurrence: "2024-01-15 12:15:33",
-    resolution: "Database connection pool increased",
-    assignee: "David Liu"
-  },
-  {
-    id: "EXC-004",
-    timestamp: "2024-01-15 11:20:45",
-    process: "Email Automation",
-    botId: "BOT-EMAIL-01",
-    exceptionType: "Business Rule",
-    rootCause: "Recipient email domain blocked",
-    status: "open",
-    severity: "medium",
-    description: "Email domain 'temp-mail.org' is on blocked domain list",
-    impact: "Email not sent, customer not notified",
-    frequency: 5,
-    lastOccurrence: "2024-01-15 11:20:45",
-    resolution: null,
-    assignee: "Anna Smith"
+// API Response Interface
+interface ApiException {
+  CreatedTime: string
+  Message: string
+  Serverity: string
+  Status: string
+  Subject: string
+  Ticket_number: string
+  assgin_name: string
+  bot_name: string
+}
+
+interface ApiResponse {
+  data: ApiException[]
+  status: string
+}
+
+// Component Exception Interface
+interface Exception {
+  id: string
+  timestamp: string
+  process: string
+  botId: string
+  exceptionType: string
+  rootCause: string
+  status: string
+  severity: string
+  description: string
+  impact: string
+  frequency: number
+  lastOccurrence: string
+  resolution: string | null
+  assignee: string
+}
+
+// Import centralized API utility
+import { apiGet, parseJsonResponse } from "@/services/api"
+
+// API function to fetch exceptions
+const fetchExceptions = async (): Promise<Exception[]> => {
+  try {
+    const response = await apiGet("/api/get-exception")
+    const apiData: ApiResponse = await parseJsonResponse<ApiResponse>(response)
+    
+    if (apiData.status !== "success" || !Array.isArray(apiData.data)) {
+      throw new Error("Invalid API response format")
+    }
+    
+    // Map API data to component format
+    return apiData.data.map((item, index) => {
+      // Convert date format from "11/13/2025" (MM/DD/YYYY) to proper date string
+      let timestamp = new Date().toISOString()
+      let lastOccurrence = new Date().toISOString()
+      
+      if (item.CreatedTime) {
+        try {
+          const dateParts = item.CreatedTime.split("/")
+          if (dateParts.length === 3) {
+            // MM/DD/YYYY format
+            const month = dateParts[0].padStart(2, "0")
+            const day = dateParts[1].padStart(2, "0")
+            const year = dateParts[2]
+            const dateObj = new Date(`${year}-${month}-${day}`)
+            if (!isNaN(dateObj.getTime())) {
+              timestamp = dateObj.toISOString()
+              lastOccurrence = dateObj.toISOString()
+            }
+          } else {
+            // Try to parse as-is
+            const dateObj = new Date(item.CreatedTime)
+            if (!isNaN(dateObj.getTime())) {
+              timestamp = dateObj.toISOString()
+              lastOccurrence = dateObj.toISOString()
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to parse date:", item.CreatedTime)
+        }
+      }
+      
+      // Normalize severity and status to lowercase
+      const severity = item.Serverity?.toLowerCase() || "medium"
+      const status = item.Status?.toLowerCase() || "open"
+      
+      return {
+        id: item.Ticket_number || `EXC-${String(index + 1).padStart(3, "0")}`,
+        timestamp: timestamp,
+        process: item.bot_name || "Unknown Process",
+        botId: item.bot_name ? `BOT-${item.bot_name.toUpperCase().replace(/\s+/g, "-")}` : `BOT-${index + 1}`,
+        exceptionType: item.Subject || "Exception",
+        rootCause: item.Message || "No description provided",
+        status: status,
+        severity: severity,
+        description: item.Message || "No description provided",
+        impact: "Process affected, requires attention",
+        frequency: 1, // Default frequency, can be calculated if API provides more data
+        lastOccurrence: lastOccurrence,
+        resolution: status === "resolved" || status === "closed" ? "Resolved" : null,
+        assignee: item.assgin_name || "Unassigned"
+      }
+    })
+  } catch (error) {
+    console.error("Error fetching exceptions:", error)
+    throw error
   }
-]
+}
+
 
 // Pattern analysis data
 const exceptionPatterns = [
@@ -142,14 +182,71 @@ const exceptionPatterns = [
 ]
 
 export default function Exceptions() {
-  const [selectedException, setSelectedException] = useState(mockExceptions[0])
+  const [exceptions, setExceptions] = useState<Exception[]>([])
+  const [selectedException, setSelectedException] = useState<Exception | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterSeverity, setFilterSeverity] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterProcess, setFilterProcess] = useState("all")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const filteredExceptions = mockExceptions.filter(exception => {
+  // Fetch exceptions on component mount
+  useEffect(() => {
+    const loadExceptions = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await fetchExceptions()
+        setExceptions(data)
+        if (data.length > 0) {
+          setSelectedException(data[0])
+        }
+      } catch (err) {
+        console.error("Failed to load exceptions:", err)
+        setError("Failed to load exceptions. Please try again.")
+        toast({
+          title: "Error",
+          description: "Failed to load exceptions from API",
+          variant: "destructive"
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadExceptions()
+  }, [toast])
+
+  // Refresh exceptions
+  const handleRefresh = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await fetchExceptions()
+      setExceptions(data)
+      if (data.length > 0 && (!selectedException || !data.find(e => e.id === selectedException.id))) {
+        setSelectedException(data[0])
+      }
+      toast({
+        title: "Refreshed",
+        description: "Exception data has been refreshed"
+      })
+    } catch (err) {
+      console.error("Failed to refresh exceptions:", err)
+      setError("Failed to refresh exceptions. Please try again.")
+      toast({
+        title: "Error",
+        description: "Failed to refresh exceptions",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredExceptions = exceptions.filter(exception => {
     const matchesSearch = exception.exceptionType.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          exception.process.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          exception.rootCause.toLowerCase().includes(searchQuery.toLowerCase())
@@ -189,12 +286,121 @@ export default function Exceptions() {
   }
 
   const handleCreateTicket = () => {
+    if (!selectedException) return
     const ticketData = createTicketFromException(selectedException)
     toast({
       title: "Ticket Created",
       description: `Ticket created for exception ${selectedException.id}. Navigate to Tickets to view and manage.`
     })
   }
+
+  // Calculate statistics from exceptions data
+  const calculateStats = () => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const lastWeek = new Date(today)
+    lastWeek.setDate(lastWeek.getDate() - 7)
+
+    // Total exceptions
+    const totalExceptions = exceptions.length
+
+    // Exceptions created today
+    const todayExceptions = exceptions.filter(e => {
+      const exceptionDate = new Date(e.timestamp)
+      return exceptionDate >= today
+    }).length
+
+    // Exceptions created yesterday
+    const yesterdayExceptions = exceptions.filter(e => {
+      const exceptionDate = new Date(e.timestamp)
+      return exceptionDate >= yesterday && exceptionDate < today
+    }).length
+
+    // Total exceptions trend
+    const totalTrend = yesterdayExceptions > 0 
+      ? Math.round(((todayExceptions - yesterdayExceptions) / yesterdayExceptions) * 100)
+      : todayExceptions > 0 ? 100 : 0
+
+    // Open issues
+    const openIssues = exceptions.filter(e => e.status === 'open').length
+
+    // New open issues today
+    const newOpenToday = exceptions.filter(e => {
+      const exceptionDate = new Date(e.timestamp)
+      return e.status === 'open' && exceptionDate >= today
+    }).length
+
+    // Resolution rate
+    const resolvedCount = exceptions.filter(e => 
+      e.status === 'resolved' || e.status === 'closed'
+    ).length
+    const resolutionRate = totalExceptions > 0 
+      ? Math.round((resolvedCount / totalExceptions) * 100)
+      : 0
+
+    // Previous week resolution rate (for trend)
+    const lastWeekExceptions = exceptions.filter(e => {
+      const exceptionDate = new Date(e.timestamp)
+      return exceptionDate >= lastWeek && exceptionDate < today
+    })
+    const lastWeekResolvedCount = lastWeekExceptions.filter(e => 
+      e.status === 'resolved' || e.status === 'closed'
+    ).length
+    const lastWeekResolutionRate = lastWeekExceptions.length > 0
+      ? Math.round((lastWeekResolvedCount / lastWeekExceptions.length) * 100)
+      : 0
+    const resolutionTrend = resolutionRate - lastWeekResolutionRate
+
+    // MTTR (Mean Time To Recovery) - average time from creation to resolution
+    // Since we don't have resolution timestamps, we calculate average age of resolved exceptions
+    const resolvedExceptionsList = exceptions.filter(e => {
+      const isResolved = e.status === 'resolved' || e.status === 'closed'
+      return isResolved && e.timestamp
+    })
+
+    let mttrHours = 0
+    if (resolvedExceptionsList.length > 0) {
+      const totalRecoveryTime = resolvedExceptionsList.reduce((sum, e) => {
+        const created = new Date(e.timestamp)
+        const now = new Date()
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+        return sum + diffHours
+      }, 0)
+      mttrHours = totalRecoveryTime / resolvedExceptionsList.length
+    }
+
+    // Previous week MTTR for trend (average age of resolved exceptions from last week)
+    const lastWeekResolvedList = lastWeekExceptions.filter(e => {
+      const isResolved = e.status === 'resolved' || e.status === 'closed'
+      return isResolved && e.timestamp
+    })
+    let lastWeekMttrHours = 0
+    if (lastWeekResolvedList.length > 0) {
+      const totalRecoveryTime = lastWeekResolvedList.reduce((sum, e) => {
+        const created = new Date(e.timestamp)
+        const now = new Date()
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+        return sum + diffHours
+      }, 0)
+      lastWeekMttrHours = totalRecoveryTime / lastWeekResolvedList.length
+    }
+    const mttrTrend = mttrHours - lastWeekMttrHours
+
+    return {
+      totalExceptions,
+      totalTrend,
+      openIssues,
+      newOpenToday,
+      resolutionRate,
+      resolutionTrend,
+      mttrHours,
+      mttrTrend
+    }
+  }
+
+  const stats = calculateStats()
 
   return (
     <div className="min-h-screen bg-background">
@@ -206,8 +412,8 @@ export default function Exceptions() {
             <p className="text-muted-foreground">AI-powered pattern analysis and error reduction</p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="gap-2">
-              <RefreshCw className="w-4 h-4" />
+            <Button variant="outline" className="gap-2" onClick={handleRefresh} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Button variant="outline" className="gap-2">
@@ -222,14 +428,17 @@ export default function Exceptions() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Exceptions</p>
-                  <p className="text-2xl font-bold">128</p>
-                  <p className="text-xs text-success">-12% from yesterday</p>
+                  <p className="text-2xl font-bold">{stats.totalExceptions}</p>
+                  <p className={`text-xs ${stats.totalTrend < 0 ? 'text-success' : stats.totalTrend > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {stats.totalTrend !== 0 && (stats.totalTrend > 0 ? '+' : '')}
+                    {stats.totalTrend}% from yesterday
+                  </p>
                 </div>
                 <AlertTriangle className="w-8 h-8 text-warning" />
               </div>
@@ -241,8 +450,10 @@ export default function Exceptions() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Open Issues</p>
-                  <p className="text-2xl font-bold text-destructive">23</p>
-                  <p className="text-xs text-destructive">+3 new today</p>
+                  <p className="text-2xl font-bold text-destructive">{stats.openIssues}</p>
+                  <p className={`text-xs ${stats.newOpenToday > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {stats.newOpenToday > 0 ? '+' : ''}{stats.newOpenToday} new today
+                  </p>
                 </div>
                 <XCircle className="w-8 h-8 text-destructive" />
               </div>
@@ -254,26 +465,42 @@ export default function Exceptions() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Resolution Rate</p>
-                  <p className="text-2xl font-bold text-success">87%</p>
-                  <p className="text-xs text-success">+5% this week</p>
+                  <p className="text-2xl font-bold text-success">{stats.resolutionRate}%</p>
+                  <p className={`text-xs ${stats.resolutionTrend > 0 ? 'text-success' : stats.resolutionTrend < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {stats.resolutionTrend !== 0 && (stats.resolutionTrend > 0 ? '+' : '')}
+                    {stats.resolutionTrend}% this week
+                  </p>
                 </div>
                 <CheckCircle2 className="w-8 h-8 text-success" />
               </div>
             </CardContent>
           </Card>
           
-          <Card className="bg-gradient-card shadow-card">
+          {/* <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">MTTR</p>
-                  <p className="text-2xl font-bold">2.4h</p>
-                  <p className="text-xs text-success">-0.5h improvement</p>
+                  <p className="text-2xl font-bold">
+                    {stats.mttrHours > 0 
+                      ? `${stats.mttrHours.toFixed(1)}h` 
+                      : 'N/A'}
+                  </p>
+                  <p className={`text-xs ${stats.mttrTrend < 0 ? 'text-success' : stats.mttrTrend > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {stats.mttrTrend !== 0 && (
+                      <>
+                        {stats.mttrTrend < 0 ? '' : '+'}
+                        {Math.abs(stats.mttrTrend).toFixed(1)}h {stats.mttrTrend < 0 ? 'improvement' : 'increase'}
+                      </>
+                    )}
+                    {stats.mttrTrend === 0 && stats.mttrHours > 0 && 'No change'}
+                    {stats.mttrHours === 0 && 'No resolved exceptions'}
+                  </p>
                 </div>
                 <Clock className="w-8 h-8 text-primary" />
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -325,27 +552,52 @@ export default function Exceptions() {
             
             <CardContent>
               <ScrollArea className="h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Exception</TableHead>
-                      <TableHead>Process</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Time</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredExceptions.map((exception) => (
-                      <TableRow 
-                        key={exception.id}
-                        className={`cursor-pointer transition-colors ${
-                          selectedException.id === exception.id 
-                            ? 'bg-primary/5 border-l-4 border-l-primary' 
-                            : 'hover:bg-muted/50'
-                        }`}
-                        onClick={() => setSelectedException(exception)}
-                      >
+                {loading ? (
+                  <div className="flex items-center justify-center h-[500px]">
+                    <div className="text-center space-y-2">
+                      <RefreshCw className="w-8 h-8 animate-spin mx-auto text-primary" />
+                      <p className="text-sm text-muted-foreground">Loading exceptions...</p>
+                    </div>
+                  </div>
+                ) : error ? (
+                  <div className="flex items-center justify-center h-[500px]">
+                    <div className="text-center space-y-2">
+                      <AlertCircle className="w-8 h-8 mx-auto text-destructive" />
+                      <p className="text-sm text-destructive">{error}</p>
+                      <Button size="sm" variant="outline" onClick={handleRefresh}>
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                ) : filteredExceptions.length === 0 ? (
+                  <div className="flex items-center justify-center h-[500px]">
+                    <div className="text-center space-y-2">
+                      <AlertTriangle className="w-8 h-8 mx-auto text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No exceptions found</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Exception</TableHead>
+                        <TableHead>Process</TableHead>
+                        <TableHead>Severity</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Time</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredExceptions.map((exception) => (
+                        <TableRow 
+                          key={exception.id}
+                          className={`cursor-pointer transition-colors ${
+                            selectedException?.id === exception.id 
+                              ? 'bg-primary/5 border-l-4 border-l-primary' 
+                              : 'hover:bg-muted/50'
+                          }`}
+                          onClick={() => setSelectedException(exception)}
+                        >
                         <TableCell>
                           <div className="space-y-1">
                             <div className="font-medium">{exception.exceptionType}</div>
@@ -371,13 +623,14 @@ export default function Exceptions() {
                             <span className="text-sm capitalize">{exception.status}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(exception.timestamp).toLocaleTimeString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(exception.timestamp).toLocaleTimeString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </ScrollArea>
             </CardContent>
           </Card>
@@ -392,93 +645,102 @@ export default function Exceptions() {
             </CardHeader>
             
             <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Exception ID</span>
-                  <span className="font-mono text-sm">{selectedException.id}</span>
+              {!selectedException ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+                  <p className="text-sm">Select an exception to view details</p>
                 </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Severity</span>
-                  <Badge className={getSeverityColor(selectedException.severity)}>
-                    {selectedException.severity}
-                  </Badge>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Status</span>
-                  <div className={`flex items-center gap-2 ${getStatusColor(selectedException.status)}`}>
-                    {getStatusIcon(selectedException.status)}
-                    <span className="text-sm capitalize">{selectedException.status}</span>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Exception ID</span>
+                      <span className="font-mono text-sm">{selectedException.id}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Severity</span>
+                      <Badge className={getSeverityColor(selectedException.severity)}>
+                        {selectedException.severity}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Status</span>
+                      <div className={`flex items-center gap-2 ${getStatusColor(selectedException.status)}`}>
+                        {getStatusIcon(selectedException.status)}
+                        <span className="text-sm capitalize">{selectedException.status}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Assignee</span>
+                      <span className="text-sm">{selectedException.assignee}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Frequency (30d)</span>
+                      <span className="text-sm font-semibold">{selectedException.frequency}x</span>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Assignee</span>
-                  <span className="text-sm">{selectedException.assignee}</span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Frequency (30d)</span>
-                  <span className="text-sm font-semibold">{selectedException.frequency}x</span>
-                </div>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm">Description</h4>
-                <p className="text-sm text-muted-foreground">
-                  {selectedException.description}
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm">Impact</h4>
-                <p className="text-sm text-muted-foreground">
-                  {selectedException.impact}
-                </p>
-              </div>
-              
-              {selectedException.resolution && (
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-sm">Resolution</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedException.resolution}
-                  </p>
-                </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Description</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedException.description}
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Impact</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedException.impact}
+                    </p>
+                  </div>
+                  
+                  {selectedException.resolution && (
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm">Resolution</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedException.resolution}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <Separator />
+                  
+                  {/* Quick Actions */}
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Quick Actions</h4>
+                    <div className="space-y-2">
+                      <Button size="sm" className="w-full justify-start gap-2" onClick={handleCreateTicket}>
+                        <FileText className="w-4 h-4" />
+                        Create Ticket
+                      </Button>
+                      <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                        <Settings className="w-4 h-4" />
+                        Request Rule Change
+                      </Button>
+                      <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                        <Target className="w-4 h-4" />
+                        Escalate to Governance
+                      </Button>
+                      <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                        <Lightbulb className="w-4 h-4" />
+                        AI Analysis
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
-              
-              <Separator />
-              
-              {/* Quick Actions */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm">Quick Actions</h4>
-                <div className="space-y-2">
-                  <Button size="sm" className="w-full justify-start gap-2" onClick={handleCreateTicket}>
-                    <FileText className="w-4 h-4" />
-                    Create Ticket
-                  </Button>
-                  <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-                    <Settings className="w-4 h-4" />
-                    Request Rule Change
-                  </Button>
-                  <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-                    <Target className="w-4 h-4" />
-                    Escalate to Governance
-                  </Button>
-                  <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-                    <Lightbulb className="w-4 h-4" />
-                    AI Analysis
-                  </Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Pattern Analysis */}
-        <Card className="bg-gradient-card shadow-card">
+        {/* <Card className="bg-gradient-card shadow-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PieChart className="w-5 h-5" />
@@ -626,7 +888,7 @@ export default function Exceptions() {
               </TabsContent>
             </Tabs>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   )

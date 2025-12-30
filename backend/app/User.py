@@ -1,18 +1,25 @@
 from flask import Blueprint, jsonify
 from app.Database.connection import connect_to_database  # your existing DB connection function    C:\sapna\HybridWorkforce_Projects\santova2\backend\Database\connection.py
+from flask import request
+from app.auth_middleware import token_required
 
 user_bp = Blueprint("user_bp", __name__)
 
 @user_bp.route("/api/users", methods=["GET"])
-def get_all_users():
+@token_required
+def get_all_users(user_id, user_name):
     """
     Fetch all users from santova.SantovaUser via stored procedure.
     """
+    host = request.headers.get("Origin")
+    DBSCHEMA = "santova"
+    if host == "https://orbis-icat.alphalogix.tech":
+        DBSCHEMA = "ICAT"
     conn = connect_to_database()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("EXEC santova.GetAllUser")
+        cursor.execute(f"EXEC {DBSCHEMA}.GetAllUser")
         rows = cursor.fetchall()
 
         # get column names

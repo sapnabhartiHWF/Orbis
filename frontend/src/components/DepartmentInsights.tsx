@@ -28,7 +28,8 @@ interface DepartmentData {
   quarterlyGrowth: number
 }
 
-const departmentData: DepartmentData[] = [
+const departmentData: DepartmentData[] = []
+/* [
   {
     id: "finance",
     name: "Finance",
@@ -137,21 +138,21 @@ const departmentData: DepartmentData[] = [
     opportunities: ["AI contract analysis", "Automated compliance", "Risk prediction"],
     quarterlyGrowth: 5.3
   }
-]
+] */
 
 const crossDepartmentData = [
-  { process: "Employee Data Updates", departments: ["HR", "IT", "Finance"], complexity: "Medium", roi: 180000 },
-  { process: "Vendor Management", departments: ["Operations", "Finance", "Legal"], complexity: "High", roi: 320000 },
-  { process: "Customer Onboarding", departments: ["Sales", "Operations", "Legal"], complexity: "High", roi: 450000 },
-  { process: "Budget Planning", departments: ["Finance", "Operations", "HR"], complexity: "Medium", roi: 280000 },
-  { process: "Compliance Reporting", departments: ["Legal", "Finance", "Operations"], complexity: "High", roi: 220000 }
+  { process: "Employee Data Updates", departments: ["HR", "IT", "Finance"], complexity: "Medium", roi: 0 },
+  { process: "Vendor Management", departments: ["Operations", "Finance", "Legal"], complexity: "High", roi: 0 },
+  { process: "Customer Onboarding", departments: ["Sales", "Operations", "Legal"], complexity: "High", roi: 0 },
+  { process: "Budget Planning", departments: ["Finance", "Operations", "HR"], complexity: "Medium", roi: 0 },
+  { process: "Compliance Reporting", departments: ["Legal", "Finance", "Operations"], complexity: "High", roi: 0 }
 ]
 
 const maturityLevelData = [
-  { level: "Basic", count: 2, percentage: 33.3, color: "hsl(var(--destructive))" },
-  { level: "Intermediate", count: 2, percentage: 33.3, color: "hsl(var(--warning))" },
-  { level: "Advanced", count: 1, percentage: 16.7, color: "hsl(var(--success))" },
-  { level: "Expert", count: 1, percentage: 16.7, color: "hsl(var(--primary))" }
+  { level: "Basic", count: 0, percentage: 0, color: "hsl(var(--destructive))" },
+  { level: "Intermediate", count: 0, percentage: 0, color: "hsl(var(--warning))" },
+  { level: "Advanced", count: 0, percentage: 0, color: "hsl(var(--success))" },
+  { level: "Expert", count: 0, percentage: 0, color: "hsl(var(--primary))" }
 ]
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--accent))', 'hsl(var(--muted))']
@@ -399,7 +400,7 @@ export function DepartmentInsights() {
                 <CardDescription>Department automation coverage analysis</CardDescription>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={chartConfig} className="h-80">
+                {/* <ChartContainer config={chartConfig} className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={departmentData} layout="horizontal">
                       <CartesianGrid strokeDasharray="3 3" />
@@ -409,7 +410,7 @@ export function DepartmentInsights() {
                       <Bar dataKey="automationRate" fill="hsl(var(--primary))" radius={4} />
                     </BarChart>
                   </ResponsiveContainer>
-                </ChartContainer>
+                </ChartContainer> */}
               </CardContent>
             </Card>
 
@@ -422,7 +423,7 @@ export function DepartmentInsights() {
                 <CardDescription>Return on investment comparison</CardDescription>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={chartConfig} className="h-80">
+                {/* <ChartContainer config={chartConfig} className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={departmentData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -432,7 +433,7 @@ export function DepartmentInsights() {
                       <Bar dataKey="totalROI" fill="hsl(var(--success))" radius={4} />
                     </BarChart>
                   </ResponsiveContainer>
-                </ChartContainer>
+                </ChartContainer> */}
               </CardContent>
             </Card>
           </div>
@@ -541,13 +542,13 @@ export function DepartmentInsights() {
                 </div>
 
                 <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-semibold mb-2">Maturity Improvement Opportunities</h4>
+                  {/* <h4 className="font-semibold mb-2">Maturity Improvement Opportunities</h4>
                   <ul className="space-y-1 text-sm text-muted-foreground">
                     <li>• 2 departments ready for advancement to Intermediate</li>
                     <li>• Focus on process standardization and tool adoption</li>
                     <li>• Implement cross-department knowledge sharing</li>
                     <li>• Develop automation governance framework</li>
-                  </ul>
+                  </ul> */}
                 </div>
               </CardContent>
             </Card>
@@ -599,15 +600,15 @@ export function DepartmentInsights() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <p className="font-medium">High Impact Processes</p>
-                    <p className="text-muted-foreground">3 processes with ROI {'>'}$300K</p>
+                    <p className="text-muted-foreground">0 processes with ROI {'>'}$0K</p>
                   </div>
                   <div>
                     <p className="font-medium">Department Synergies</p>
-                    <p className="text-muted-foreground">Finance involved in 4/5 processes</p>
+                    <p className="text-muted-foreground">Finance involved in 0/0 processes</p>
                   </div>
                   <div>
                     <p className="font-medium">Automation Potential</p>
-                    <p className="text-muted-foreground">$1.45M total opportunity</p>
+                    <p className="text-muted-foreground">$0 total opportunity</p>
                   </div>
                 </div>
               </div>

@@ -19,7 +19,8 @@ interface ProcessMetrics {
   status: "healthy" | "warning" | "critical"
 }
 
-const processMetrics: ProcessMetrics[] = [
+const processMetrics: ProcessMetrics[] = []
+/* [
   {
     processName: "Invoice Processing",
     submissions: 2847,
@@ -70,40 +71,40 @@ const processMetrics: ProcessMetrics[] = [
     department: "HR",
     status: "healthy"
   }
-]
+] */
 
 const submissionTrendData = [
-  { date: "2024-01", total: 8420, successful: 8056, failed: 364, automated: 7234 },
-  { date: "2024-02", total: 9156, successful: 8798, failed: 358, automated: 8012 },
-  { date: "2024-03", total: 9834, successful: 9421, failed: 413, automated: 8734 },
-  { date: "2024-04", total: 10247, successful: 9876, failed: 371, automated: 9156 },
-  { date: "2024-05", total: 11093, successful: 10654, failed: 439, automated: 9887 },
-  { date: "2024-06", total: 11748, successful: 11289, failed: 459, automated: 10456 }
+  { date: "2024-01", total: 0, successful: 0, failed: 0, automated: 0 },
+  /*{ date: "2024-02", total: 0, successful: 0, failed: 0, automated: 0 },
+  { date: "2024-03", total: 0, successful: 0, failed: 0, automated: 0 },
+  { date: "2024-04", total: 0, successful: 0, failed: 0, automated: 0 },
+  { date: "2024-05", total: 0, successful: 0, failed: 0, automated: 0 },
+  { date: "2024-06", total: 0, successful: 0, failed: 0, automated: 0 } */
 ]
 
 const cycleTimeAnalysis = [
-  { process: "Invoice Processing", manual: 45, automated: 2.3, improvement: 94.9 },
-  { process: "Customer Onboarding", manual: 240, automated: 8.7, improvement: 96.4 },
-  { process: "Expense Reports", manual: 30, automated: 4.2, improvement: 86.0 },
-  { process: "IT Tickets", manual: 480, automated: 15.6, improvement: 96.8 },
-  { process: "Data Updates", manual: 15, automated: 1.8, improvement: 88.0 }
+  { process: "Invoice Processing", manual: 0, automated: 0, improvement: 0 },
+  { process: "Customer Onboarding", manual: 0, automated: 0, improvement: 0 },
+  { process: "Expense Reports", manual: 0, automated: 0, improvement: 0 },
+  { process: "IT Tickets", manual: 0, automated: 0, improvement: 0 },
+  { process: "Data Updates", manual: 0, automated: 0, improvement: 0 }
 ]
 
 const completionRateData = [
-  { week: "Week 1", rate: 94.2, target: 95.0, volume: 2847 },
-  { week: "Week 2", rate: 95.8, target: 95.0, volume: 3124 },
-  { week: "Week 3", rate: 93.7, target: 95.0, volume: 2956 },
-  { week: "Week 4", rate: 96.4, target: 95.0, volume: 3234 },
-  { week: "Week 5", rate: 97.1, target: 95.0, volume: 3456 },
-  { week: "Week 6", rate: 95.9, target: 95.0, volume: 3289 }
+  { week: "Week 1", rate: 0, target: 0, volume: 0 },
+  { week: "Week 2", rate: 0, target: 0, volume: 0 },
+  { week: "Week 3", rate: 0, target: 0, volume: 0 },
+  { week: "Week 4", rate: 0, target: 0, volume: 0 },
+  // { week: "Week 5", rate: 0, target: 0, volume: 0 },
+  // { week: "Week 6", rate: 0, target: 0, volume: 0 }
 ]
 
 const exceptionAnalysis = [
-  { category: "Data Validation Errors", count: 156, percentage: 34.2, trend: -8.4 },
-  { category: "System Integration Issues", count: 98, percentage: 21.5, trend: 12.7 },
-  { category: "Business Rule Violations", count: 87, percentage: 19.1, trend: -15.2 },
-  { category: "Timeout Errors", count: 65, percentage: 14.3, trend: 5.8 },
-  { category: "Authentication Failures", count: 50, percentage: 11.0, trend: -22.1 }
+  { category: "Data Validation Errors", count: 0, percentage: 0, trend: 0 },
+  { category: "System Integration Issues", count: 0, percentage: 0, trend: 0 },
+  { category: "Business Rule Violations", count: 0, percentage: 0, trend: 0 },
+  { category: "Timeout Errors", count: 0, percentage: 0, trend: 0 },
+  { category: "Authentication Failures", count: 0, percentage: 0, trend: 0 }
 ]
 
 const chartConfig = {
@@ -208,7 +209,7 @@ export function ProcessAnalytics() {
                 <p className="text-2xl font-bold text-success-foreground">
                   {((submissionTrendData[submissionTrendData.length - 1].successful / submissionTrendData[submissionTrendData.length - 1].total) * 100).toFixed(1)}%
                 </p>
-                <p className="text-xs text-success-foreground/80">+2.4% from last month</p>
+                <p className="text-xs text-success-foreground/80">+0% from last month</p>
               </div>
               <CheckCircle className="w-8 h-8 text-success-foreground/80" />
             </div>
@@ -220,8 +221,8 @@ export function ProcessAnalytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-warning-foreground/80 text-sm font-medium">Avg Cycle Time</p>
-                <p className="text-2xl font-bold text-warning-foreground">4.2 min</p>
-                <p className="text-xs text-warning-foreground/80">-34% improvement</p>
+                <p className="text-2xl font-bold text-warning-foreground">0 min</p>
+                <p className="text-xs text-warning-foreground/80">0% improvement</p>
               </div>
               <Clock className="w-8 h-8 text-warning-foreground/80" />
             </div>
@@ -236,7 +237,7 @@ export function ProcessAnalytics() {
                 <p className="text-2xl font-bold text-foreground">
                   {((submissionTrendData[submissionTrendData.length - 1].automated / submissionTrendData[submissionTrendData.length - 1].total) * 100).toFixed(1)}%
                 </p>
-                <p className="text-xs text-success">+8.9% from last month</p>
+                <p className="text-xs text-success">0% from last month</p>
               </div>
               <Activity className="w-8 h-8 text-muted-foreground" />
             </div>

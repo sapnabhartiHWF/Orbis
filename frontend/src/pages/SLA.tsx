@@ -28,7 +28,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 // Mock data for SLA tracking
-const slaDefinitions = [
+const slaDefinitions = []
+/* [
   {
     id: "sla-001",
     processName: "Invoice Processing",
@@ -71,32 +72,36 @@ const slaDefinitions = [
     breaches: 8,
     owner: "IT Support"
   }
-];
+] */
 
-const kpiTrends = [
+const kpiTrends = []
+/* [
   { month: "Jan", cycleTime: 4.2, resolutionTime: 2.1, throughput: 94 },
   { month: "Feb", cycleTime: 3.8, resolutionTime: 1.9, throughput: 96 },
   { month: "Mar", cycleTime: 4.5, resolutionTime: 2.3, throughput: 92 },
   { month: "Apr", cycleTime: 3.9, resolutionTime: 2.0, throughput: 95 },
   { month: "May", cycleTime: 3.6, resolutionTime: 1.8, throughput: 97 },
   { month: "Jun", cycleTime: 4.1, resolutionTime: 2.2, throughput: 93 }
-];
+] */
 
-const complianceByDepartment = [
+const complianceByDepartment = []
+/* [
   { department: "Finance", compliance: 92, processes: 15 },
   { department: "Sales", compliance: 97, processes: 8 },
   { department: "IT", compliance: 88, processes: 22 },
   { department: "HR", compliance: 94, processes: 12 },
   { department: "Operations", compliance: 91, processes: 18 }
-];
+] */
 
-const complianceByRegion = [
+const complianceByRegion = []
+/* [
   { region: "Americas", compliance: 95, color: "#22c55e" },
   { region: "EMEA", compliance: 92, color: "#3b82f6" },
   { region: "APAC", compliance: 89, color: "#f59e0b" }
-];
+] */
 
-const recentAlerts = [
+const recentAlerts = []
+/* [
   {
     id: "alert-001",
     processName: "Invoice Processing",
@@ -121,7 +126,7 @@ const recentAlerts = [
     time: "1 hour ago",
     message: "Throughput below target for 2 consecutive hours"
   }
-];
+] */
 
 const chartConfig = {
   cycleTime: {
@@ -201,33 +206,33 @@ export default function SLA() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <DashboardMetricCard
           title="Overall SLA Compliance"
-          value="92.4%"
-          subtitle="Target: 95%"
-          trend={{ value: -2.1, label: "vs last month" }}
+          value="0%"
+          subtitle="Target: 0%"
+          trend={{ value: 0, label: "vs last month" }}
           icon={<Target className="h-4 w-4" />}
           variant="default"
         />
         <DashboardMetricCard
           title="Active SLA Breaches"
-          value="12"
+          value="0"
           subtitle="Requiring attention"
-          trend={{ value: 3, label: "new today" }}
+          trend={{ value: 0, label: "new today" }}
           icon={<AlertTriangle className="h-4 w-4" />}
           variant="danger"
         />
         <DashboardMetricCard
           title="Avg Cycle Time"
-          value="4.1h"
+          value="0m"
           subtitle="Target: 4.0h"
-          trend={{ value: 0.2, label: "vs target" }}
+          trend={{ value: 0, label: "vs target" }}
           icon={<Clock className="h-4 w-4" />}
           variant="warning"
         />
         <DashboardMetricCard
           title="Processes Monitored"
-          value="75"
+          value="0"
           subtitle="Across all departments"
-          trend={{ value: 5, label: "added this month" }}
+          trend={{ value: 0, label: "added this month" }}
           icon={<BarChart3 className="h-4 w-4" />}
           variant="default"
         />
@@ -451,8 +456,8 @@ export default function SLA() {
                       <span>Average Cycle Time</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">4.1 hours</div>
-                      <div className="text-sm text-muted-foreground">Target: 4.0h</div>
+                      <div className="font-semibold">0m</div>
+                      <div className="text-sm text-muted-foreground">Target: 0m</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
@@ -461,8 +466,8 @@ export default function SLA() {
                       <span>Resolution Time</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">2.0 hours</div>
-                      <div className="text-sm text-muted-foreground">Target: 2.0h</div>
+                      <div className="font-semibold">0m</div>
+                      <div className="text-sm text-muted-foreground">Target: 0m</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
@@ -471,8 +476,8 @@ export default function SLA() {
                       <span>Throughput Rate</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">95.2%</div>
-                      <div className="text-sm text-muted-foreground">Target: 95%</div>
+                      <div className="font-semibold">0%</div>
+                      <div className="text-sm text-muted-foreground">Target: 0%</div>
                     </div>
                   </div>
                 </div>
@@ -617,7 +622,7 @@ export default function SLA() {
                 <CardTitle className="text-lg">Critical Alerts</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-destructive">3</div>
+                <div className="text-3xl font-bold text-destructive">0</div>
                 <div className="text-sm text-muted-foreground">Requiring immediate attention</div>
               </CardContent>
             </Card>
@@ -626,7 +631,7 @@ export default function SLA() {
                 <CardTitle className="text-lg">Warning Alerts</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-warning">7</div>
+                <div className="text-3xl font-bold text-warning">0</div>
                 <div className="text-sm text-muted-foreground">Approaching SLA thresholds</div>
               </CardContent>
             </Card>
@@ -635,7 +640,7 @@ export default function SLA() {
                 <CardTitle className="text-lg">Info Alerts</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-info">12</div>
+                <div className="text-3xl font-bold text-info">0</div>
                 <div className="text-sm text-muted-foreground">Performance notifications</div>
               </CardContent>
             </Card>

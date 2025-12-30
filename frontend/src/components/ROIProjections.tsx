@@ -32,7 +32,8 @@ interface ROIProjection {
   lastUpdated: string
 }
 
-const dummyProjections: ROIProjection[] = [
+const dummyProjections: ROIProjection[] = []
+/* [
   {
     processId: 'roi1',
     processName: 'Invoice Processing Automation',
@@ -103,34 +104,37 @@ const dummyProjections: ROIProjection[] = [
     status: 'behind',
     lastUpdated: '2024-01-27'
   }
-]
+] */
 
 // Time series data for ROI tracking
-const monthlyROIData = [
+const monthlyROIData = []
+/* [
   { month: 'Jan', projected: 150, actual: 145 },
   { month: 'Feb', projected: 162, actual: 168 },
   { month: 'Mar', projected: 175, actual: 182 },
   { month: 'Apr', projected: 188, actual: 190 },
   { month: 'May', projected: 200, actual: 205 },
   { month: 'Jun', projected: 210, actual: 198 }
-]
+] */
 
-const cumulativeSavingsData = [
+const cumulativeSavingsData = []
+/* [
   { month: 'Jan', projected: 50000, actual: 48000 },
   { month: 'Feb', projected: 125000, actual: 135000 },
   { month: 'Mar', projected: 210000, actual: 225000 },
   { month: 'Apr', projected: 305000, actual: 320000 },
   { month: 'May', projected: 410000, actual: 425000 },
   { month: 'Jun', projected: 525000, actual: 535000 }
-]
+] */
 
-const departmentROIData = [
-  { department: 'Finance', roi: 192, savings: 350000 },
-  { department: 'HR', roi: 148, savings: 180000 },
-  { department: 'Operations', roi: 221, savings: 485000 },
-  { department: 'IT', roi: 207, savings: 220000 },
-  { department: 'Procurement', roi: 163, savings: 140000 }
-]
+const departmentROIData = []
+/* [
+  { department: 'Finance', roi: 0, savings: 0 },
+  { department: 'HR', roi: 0, savings: 0 },
+  { department: 'Operations', roi: 0, savings: 0 },
+  { department: 'IT', roi: 0, savings: 0 },
+  { department: 'Procurement', roi: 0, savings: 0 }
+] */
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--muted))']
 

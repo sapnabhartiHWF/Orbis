@@ -198,7 +198,7 @@ export function BusinessROICalculator() {
               </div>
             </div>
 
-            <Button className="w-full bg-gradient-primary">
+            <Button className="w-full bg-gradient-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled>
               Generate Business Case
             </Button>
           </CardContent>

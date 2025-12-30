@@ -160,6 +160,18 @@ const ExceptionRatioByCountry: React.FC<ExceptionRatioByCountryProps> = ({ count
                   bottom: 5,
                 }}
               >
+                <defs>
+                  {countryCodes.map((country) => {
+                    const color = countryColors[country];
+                    const gradientId = `gradient-exception-${country}`;
+                    return (
+                      <linearGradient key={gradientId} id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={color} stopOpacity={1} />
+                        <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+                      </linearGradient>
+                    );
+                  })}
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis dataKey="exceptionCode" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
                 <YAxis
@@ -179,16 +191,19 @@ const ExceptionRatioByCountry: React.FC<ExceptionRatioByCountryProps> = ({ count
                   align="center"
                   verticalAlign="bottom"
                 />
-                {countryCodes.map((country) => (
-                  <Bar
-                    key={country}
-                    dataKey={country}
-                    stackId="a"
-                    fill={countryColors[country]}
-                    radius={[4, 4, 0, 0]}
-                    barSize={300}
-                  />
-                ))}
+                {countryCodes.map((country) => {
+                  const gradientId = `gradient-exception-${country}`;
+                  return (
+                    <Bar
+                      key={country}
+                      dataKey={country}
+                      stackId="a"
+                      fill={`url(#${gradientId})`}
+                      radius={[4, 4, 0, 0]}
+                      barSize={300}
+                    />
+                  );
+                })}
               </BarChart>
             </ResponsiveContainer>
           )

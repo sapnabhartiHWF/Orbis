@@ -10,7 +10,7 @@ export interface Rule {
     rule_version: string;
   }
   
-  const url = "https://santova.onrender.com/rulebook/";
+  const url = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//rulebook/";
   
   export const fetchRulesData = async () => {
     try {

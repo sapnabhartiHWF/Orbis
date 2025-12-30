@@ -5,6 +5,10 @@ from functools import wraps
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Skip authentication for OPTIONS requests (CORS preflight)
+        if request.method == "OPTIONS":
+            return jsonify({"ok": True}), 200
+
         token = None
 
         # Get token from "Authorization" header
@@ -27,7 +31,7 @@ def token_required(f):
                 return jsonify({"message": "Invalid token: user_id missing"}), 401
 
         except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token expired!"}), 401
+            return jsonify({"message": "Your session has expired. Please log in again to continue."}), 401
         except jwt.InvalidTokenError:
             return jsonify({"message": "Invalid token!"}), 401
 

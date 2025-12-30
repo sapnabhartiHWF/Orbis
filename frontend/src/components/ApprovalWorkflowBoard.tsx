@@ -32,7 +32,8 @@ interface ProcessApproval {
   estimatedROI: number
 }
 
-const mockApprovals: ProcessApproval[] = [
+const mockApprovals: ProcessApproval[] = []
+/* [
   {
     processId: "P001",
     processTitle: "Invoice Processing Automation",
@@ -123,7 +124,7 @@ const mockApprovals: ProcessApproval[] = [
       }
     ]
   }
-]
+] */
 
 export function ApprovalWorkflowBoard() {
   const [selectedApproval, setSelectedApproval] = useState<ProcessApproval | null>(null)

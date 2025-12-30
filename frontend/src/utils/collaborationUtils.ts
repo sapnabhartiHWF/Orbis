@@ -13,6 +13,10 @@ export interface FileUpload {
   description?: string
   tags: string[]
   status: 'uploading' | 'processing' | 'ready' | 'error'
+  isTriggered?: boolean
+  triggerStatus?: string
+  triggeredAt?: string | null
+  notTriggeredReason?: string | null
 }
 
 export interface Comment {
@@ -90,7 +94,7 @@ export interface Milestone {
   title: string
   description: string
   dueDate: string
-  status: 'pending' | 'in-progress' | 'completed' | 'overdue'
+  status: 'assigned' | 'in-progress' | 'completed' | 'overdue'
   completedAt?: string
   completedBy?: string
 }
@@ -145,17 +149,90 @@ export function getFileTypeIcon(format: string): string {
   return '📎'
 }
 
-export function getTimeAgo(dateString: string): string {
-  const date = new Date(dateString)
+export function getTimeAgo(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return ''
+  }
+  
+  // Parse date string - handle both ISO format and SQL Server datetime format
+  let date: Date
+  try {
+    // Convert to string if needed
+    const str = String(dateString).trim()
+    if (!str || str === 'null' || str === 'undefined' || str === '') {
+      return ''
+    }
+    
+    // If date already has timezone info (Z or +), use as-is
+    if (str.includes('Z') || str.includes('+') || (str.includes('-') && str.length > 10 && str.includes('T'))) {
+      date = new Date(str)
+      if (isNaN(date.getTime())) {
+        return ''
+      }
+    } else if (str.includes('T') && !str.includes('Z') && !str.includes('+')) {
+      // ISO format without timezone - assume UTC (from backend format_datetime_for_json)
+      date = new Date(str + 'Z')
+      if (isNaN(date.getTime())) {
+        return ''
+      }
+    } else if (str.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)) {
+      // SQL Server datetime format (YYYY-MM-DD HH:MM:SS or YYYY-MM-DD HH:MM:SS.mmm)
+      // Backend should have converted this to ISO format, but handle it if it hasn't
+      // Replace space with T and add Z to treat as UTC (preserving exact time from database)
+      const isoStr = str.replace(' ', 'T') + (str.includes('.') ? '' : '.000') + 'Z'
+      date = new Date(isoStr)
+      if (isNaN(date.getTime())) {
+        return ''
+      }
+    } else {
+      // Try parsing as-is (might work for some formats)
+      date = new Date(str)
+      if (isNaN(date.getTime())) {
+        // Try adding Z suffix as last resort
+        try {
+          date = new Date(str + 'Z')
+          if (isNaN(date.getTime())) {
+            return ''
+          }
+        } catch (e) {
+          return ''
+        }
+      }
+    }
+    
+    // Validate date
+    if (isNaN(date.getTime())) {
+      return ''
+    }
+  } catch (e) {
+    return ''
+  }
+  
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+  
+  // Handle negative differences (future dates) - show formatted date
+  if (diffInSeconds < 0) {
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      timeZone: 'UTC'
+    })
+  }
   
   if (diffInSeconds < 60) return 'just now'
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
   if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`
   
-  return date.toLocaleDateString()
+  // For dates older than 30 days, show formatted date
+  return date.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric',
+    timeZone: 'UTC' // Display in UTC to match database
+  })
 }
 
 export function generateNotification(

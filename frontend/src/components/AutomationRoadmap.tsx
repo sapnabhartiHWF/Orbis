@@ -24,7 +24,8 @@ interface RoadmapItem {
   milestones: { name: string; date: string; completed: boolean }[]
 }
 
-const roadmapData: RoadmapItem[] = [
+const roadmapData: RoadmapItem[] = []
+/* [
   {
     id: "R001",
     title: "Invoice Processing Automation",
@@ -130,7 +131,7 @@ const roadmapData: RoadmapItem[] = [
       { name: "Production Release", date: "2025-03-31", completed: false }
     ]
   }
-]
+] */
 
 const getStatusColor = (status: string) => {
   switch (status) {

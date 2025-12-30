@@ -86,12 +86,12 @@ export function CommentSystem({
 
   const mentionRef = useRef<HTMLDivElement>(null);
 
-  const userUrl = "https://orbis-backend-usfo.onrender.com/api/users";
-  const getcmtUrl = "https://orbis-backend-usfo.onrender.com/api/get-comments";
-  const addcmtUrl = "https://orbis-backend-usfo.onrender.com/api/add-comment";
-  const reactCommentUrl = "https://orbis-backend-usfo.onrender.com/api/react-comment";
-  const getAllReact = "https://orbis-backend-usfo.onrender.com/api/get-all-reacts";
-  const deleteReactUrl = "https://orbis-backend-usfo.onrender.com/api/delete-reaction";
+  const userUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/users";
+  const getcmtUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/get-comments";
+  const addcmtUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/add-comment";
+  const reactCommentUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/react-comment";
+  const getAllReact = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/get-all-reacts";
+  const deleteReactUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/delete-reaction";
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const token = localStorage.getItem("token");
@@ -382,11 +382,11 @@ export function CommentSystem({
 
     const numericCommentId = parseInt(commentId.replace("c", ""));
     const r_id = selectedEmoji.R_Id;
-    const user_id = currentUser.id; // ✅ fixed
+    const user_id = currentUser.id;
 
     try {
-      // Step 1: Try to delete reaction (toggle off)
-      const delResponse = await fetch(deleteReactUrl, {
+      // Step 1: Try to add reaction first (more common case)
+      const addResponse = await fetch(reactCommentUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -395,33 +395,29 @@ export function CommentSystem({
         body: JSON.stringify({
           CommentID: numericCommentId,
           R_Id: r_id,
-          UserID: user_id, // ✅ fixed
         }),
       });
 
-      const delData = await delResponse.json();
+      const addData = await addResponse.json();
 
-      if (delResponse.ok && delData.success) {
-        // ✅ Successfully removed reaction
+      if (addResponse.ok && addData.success) {
+        // ✅ Successfully added reaction
         setComments((prev) =>
           prev.map((c) => {
             if (c.id === commentId) {
-              const updatedReactions = c.reactions
-                .map((r) =>
-                  r.emoji === emoji ? { ...r, count: r.count - 1 } : r
-                )
-                .filter((r) => r.count > 0);
-              return { ...c, reactions: updatedReactions };
+              const existing = c.reactions.find((r) => r.emoji === emoji);
+              if (existing) existing.count += 1;
+              else c.reactions.push({ emoji, count: 1 });
             }
-            return c;
+            return { ...c };
           })
         );
         return;
       }
 
-      // Step 2: If no matching reaction, add it
-      if (delData.message?.includes("No matching reaction")) {
-        const addResponse = await fetch(reactCommentUrl, {
+      // Step 2: If "already reacted", then delete it (toggle off)
+      if (addData.message?.includes("already reacted")) {
+        const delResponse = await fetch(deleteReactUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -430,29 +426,46 @@ export function CommentSystem({
           body: JSON.stringify({
             CommentID: numericCommentId,
             R_Id: r_id,
-            UserID: user_id, // ✅ fixed
+            UserID: user_id,
           }),
         });
 
-        const addData = await addResponse.json();
+        const delData = await delResponse.json();
 
-        if (addResponse.ok && addData.success) {
+        if (delResponse.ok && delData.success) {
+          // ✅ Successfully removed reaction
           setComments((prev) =>
             prev.map((c) => {
               if (c.id === commentId) {
-                const existing = c.reactions.find((r) => r.emoji === emoji);
-                if (existing) existing.count += 1;
-                else c.reactions.push({ emoji, count: 1 });
+                const updatedReactions = c.reactions
+                  .map((r) =>
+                    r.emoji === emoji ? { ...r, count: r.count - 1 } : r
+                  )
+                  .filter((r) => r.count > 0);
+                return { ...c, reactions: updatedReactions };
               }
-              return { ...c };
+              return c;
             })
           );
         } else {
-          toast({ title: "Failed to react", variant: "destructive" });
+          // If delete also fails, refresh to get current state
+          window.dispatchEvent(new Event("refreshComments"));
         }
+      } else {
+        // Other error when adding
+        toast({ 
+          title: "Failed to react", 
+          description: addData.message || "An error occurred",
+          variant: "destructive" 
+        });
       }
     } catch (err) {
       console.error("Error toggling reaction:", err);
+      toast({ 
+        title: "Network error", 
+        description: "Please try again",
+        variant: "destructive" 
+      });
     }
   };
 
@@ -672,7 +685,7 @@ function CommentItem({
         MentionedUserIDs: [],
       };
 
-      const response = await fetch("https://orbis-backend-usfo.onrender.com/api/add-comment", {
+      const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/add-comment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

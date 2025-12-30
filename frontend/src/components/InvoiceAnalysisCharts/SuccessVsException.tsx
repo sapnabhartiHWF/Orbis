@@ -114,16 +114,31 @@ const SuccessVsException = ({ countryCode = "--SELECT--", chartType = "default" 
                 }}
                 barCategoryGap="20%"
               >
+                <defs>
+                  {countries.map((country, index) => {
+                    const color = COLORS[index % COLORS.length];
+                    const gradientId = `gradient-status-${country}`;
+                    return (
+                      <linearGradient key={gradientId} id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={color} stopOpacity={1} />
+                        <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+                      </linearGradient>
+                    );
+                  })}
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="status" stroke="hsl(var(--muted-foreground))" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} angle={0} textAnchor="middle" height={30} />
                 <YAxis stroke="hsl(var(--muted-foreground))" label={{ value: 'Invoice Count', angle: -90, position: 'insideLeft', fill: "hsl(var(--muted-foreground))" }} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
                 <Tooltip cursor={false} content={<CustomStatusTooltip countries={countries} COLORS={COLORS} />} />
                 <Legend />
-                {countries.map((country, index) => (
-                  <Bar key={country} dataKey={country} fill={COLORS[index % COLORS.length]}>
-                    <LabelList dataKey={country} position="top" fill="hsl(var(--foreground))" fontSize={10} />
-                  </Bar>
-                ))}
+                {countries.map((country, index) => {
+                  const gradientId = `gradient-status-${country}`;
+                  return (
+                    <Bar key={country} dataKey={country} fill={`url(#${gradientId})`} radius={[4, 4, 0, 0]}>
+                      <LabelList dataKey={country} position="top" fill="hsl(var(--foreground))" fontSize={10} />
+                    </Bar>
+                  );
+                })}
               </BarChart>
             </ResponsiveContainer>
           )

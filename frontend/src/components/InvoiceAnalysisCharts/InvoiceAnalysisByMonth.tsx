@@ -152,6 +152,18 @@ const InvoiceAnalysisByMonth: React.FC<InvoiceAnalysisByMonthProps> = ({
               }}
               barSize={selectedMonth === "all" ? 100 : 200}
             >
+              <defs>
+                {displayCountries.map((country) => {
+                  const color = countryColors[country];
+                  const gradientId = `gradient-month-${country}`;
+                  return (
+                    <linearGradient key={gradientId} id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={1} />
+                      <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey="month"
@@ -192,16 +204,19 @@ const InvoiceAnalysisByMonth: React.FC<InvoiceAnalysisByMonthProps> = ({
                   return countryLabels[value] || value;
                 }}
               />
-              {displayCountries.map((country) => (
-                <Bar
-                  key={country}
-                  dataKey={country}
-                  stackId="a"
-                  fill={countryColors[country]}
-                  radius={[4, 4, 0, 0]}
-                  name={country}
-                />
-              ))}
+              {displayCountries.map((country) => {
+                const gradientId = `gradient-month-${country}`;
+                return (
+                  <Bar
+                    key={country}
+                    dataKey={country}
+                    stackId="a"
+                    fill={`url(#${gradientId})`}
+                    radius={[4, 4, 0, 0]}
+                    name={country}
+                  />
+                );
+              })}
             </BarChart>
           </ResponsiveContainer>
         ) : (

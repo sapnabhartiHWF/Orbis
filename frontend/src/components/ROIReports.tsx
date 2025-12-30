@@ -25,7 +25,8 @@ interface ROIProject {
   variance: number
 }
 
-const roiProjects: ROIProject[] = [
+const roiProjects: ROIProject[] = []
+/* [
   {
     id: "ROI-001",
     name: "Invoice Processing Automation",
@@ -101,61 +102,61 @@ const roiProjects: ROIProject[] = [
     paybackPeriod: 6.2,
     variance: 0
   }
-]
+] */
 
 const monthlyROIData = [
-  { month: "Jan", actualROI: 2800000, projectedROI: 2400000, cumulativeActual: 2800000, cumulativeProjected: 2400000 },
-  { month: "Feb", actualROI: 3200000, projectedROI: 2800000, cumulativeActual: 6000000, cumulativeProjected: 5200000 },
-  { month: "Mar", actualROI: 3800000, projectedROI: 3400000, cumulativeActual: 9800000, cumulativeProjected: 8600000 },
-  { month: "Apr", actualROI: 4100000, projectedROI: 3800000, cumulativeActual: 13900000, cumulativeProjected: 12400000 },
-  { month: "May", actualROI: 4500000, projectedROI: 4200000, cumulativeActual: 18400000, cumulativeProjected: 16600000 },
-  { month: "Jun", actualROI: 4800000, projectedROI: 4600000, cumulativeActual: 23200000, cumulativeProjected: 21200000 }
+  { month: "Jan", actualROI: 0, projectedROI: 0, cumulativeActual: 0, cumulativeProjected: 0 },
+  { month: "Feb", actualROI: 0, projectedROI: 0, cumulativeActual: 0, cumulativeProjected: 0 },
+  { month: "Mar", actualROI: 0, projectedROI: 0, cumulativeActual: 0, cumulativeProjected: 0 },
+  { month: "Apr", actualROI: 0, projectedROI: 0, cumulativeActual: 0, cumulativeProjected: 0 },
+  { month: "May", actualROI: 0, projectedROI: 0, cumulativeActual: 0, cumulativeProjected: 0 },
+  { month: "Jun", actualROI: 0, projectedROI: 0, cumulativeActual: 0, cumulativeProjected: 0 }
 ]
 
 const costSavingsBreakdown = [
-  { category: "Labor Cost Reduction", actual: 8900000, projected: 8200000, percentage: 42.3 },
-  { category: "Process Efficiency", actual: 5600000, projected: 6100000, percentage: 26.6 },
-  { category: "Error Reduction", actual: 3800000, projected: 3400000, percentage: 18.1 },
-  { category: "Time Savings", actual: 2100000, projected: 1900000, percentage: 10.0 },
-  { category: "Compliance & Risk", actual: 620000, projected: 580000, percentage: 2.9 }
+  { category: "Labor Cost Reduction", actual: 0, projected: 0, percentage: 0 },
+  { category: "Process Efficiency", actual: 0, projected: 0, percentage: 0 },
+  { category: "Error Reduction", actual: 0, projected: 0, percentage: 0 },
+  { category: "Time Savings", actual: 0, projected: 0, percentage: 0 },
+  { category: "Compliance & Risk", actual: 0, projected: 0, percentage: 0 }
 ]
 
 const departmentROIComparison = [
   { 
     department: "Finance", 
-    investment: 350000, 
-    actualSavings: 1100000, 
-    projectedSavings: 1000000,
-    roi: 3.14,
-    projects: 3,
-    variance: 10.0
+    investment: 0, 
+    actualSavings: 0, 
+    projectedSavings: 0,
+    roi: 0,
+    projects: 0,
+    variance: 0
   },
   {
     department: "Sales",
-    investment: 220000,
-    actualSavings: 450000,
-    projectedSavings: 480000,
-    roi: 2.05,
-    projects: 1,
-    variance: -6.3
+    investment: 0,
+    actualSavings: 0,
+    projectedSavings: 0,
+    roi: 0,
+    projects: 0,
+    variance: 0
   },
   {
     department: "IT",
-    investment: 95000,
-    actualSavings: 420000,
-    projectedSavings: 360000,
-    roi: 4.42,
-    projects: 1,
-    variance: 16.7
+    investment: 0,
+    actualSavings: 0,
+    projectedSavings: 0,
+    roi: 0,
+    projects: 0,
+    variance: 0
   },
   {
     department: "HR",
-    investment: 180000,
-    actualSavings: 320000,
-    projectedSavings: 380000,
-    roi: 1.78,
-    projects: 1,
-    variance: -15.8
+    investment: 0,
+    actualSavings: 0,
+    projectedSavings: 0,
+    roi: 0,
+    projects: 0,
+    variance: 0
   }
 ]
 
@@ -388,8 +389,8 @@ export function ROIReports() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Investment Accuracy</p>
                     <div className="flex items-center gap-2">
-                      <Progress value={78} className="flex-1 h-3" />
-                      <span className="text-sm font-medium">78%</span>
+                      <Progress value={0} className="flex-1 h-3" />
+                      <span className="text-sm font-medium">0%</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Projects within ±20% of budget
@@ -399,8 +400,8 @@ export function ROIReports() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Savings Achievement</p>
                     <div className="flex items-center gap-2">
-                      <Progress value={112} className="flex-1 h-3" />
-                      <span className="text-sm font-medium text-success">112%</span>
+                      <Progress value={0} className="flex-1 h-3" />
+                      <span className="text-sm font-medium text-success">0%</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Exceeded projected savings
@@ -412,8 +413,8 @@ export function ROIReports() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">ROI Target Achievement</p>
                     <div className="flex items-center gap-2">
-                      <Progress value={118} className="flex-1 h-3" />
-                      <span className="text-sm font-medium text-success">118%</span>
+                      <Progress value={0} className="flex-1 h-3" />
+                      <span className="text-sm font-medium text-success">0%</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Above target ROI performance
@@ -423,8 +424,8 @@ export function ROIReports() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Payback Speed</p>
                     <div className="flex items-center gap-2">
-                      <Progress value={89} className="flex-1 h-3" />
-                      <span className="text-sm font-medium">89%</span>
+                      <Progress value={0} className="flex-1 h-3" />
+                      <span className="text-sm font-medium">0%</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Faster than projected payback

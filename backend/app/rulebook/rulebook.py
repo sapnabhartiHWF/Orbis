@@ -9,18 +9,21 @@ def format_html_text(text):
     text = soup.get_text(separator="\n", strip=True)
     return text    
 
-def get_rulebook_data():
+def get_rulebook_data(DBSCHEMA):
     """
     Retrieves the rulebook data from the database.
     
     Returns:
         list: A list of dictionaries containing rulebook data.
     """
+    if DBSCHEMA == 'ICAT':
+        return []
+        
     from Database import connect_to_database
     connection = connect_to_database()
     
     cursor = connection.cursor()
-    cursor.callproc('santova.GetRuleBookForPlatForm')
+    cursor.callproc(f'{DBSCHEMA}.GetRuleBookForPlatForm')
     
     rulebook_data = []
     for row in cursor.fetchall():

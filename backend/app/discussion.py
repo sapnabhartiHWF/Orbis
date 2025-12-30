@@ -7,7 +7,7 @@ import json
 discussion_bp = Blueprint("discussion_bp", __name__)
 
 
-def insert_comment(user_id, comment_text, parent_id=None, mentioned_user_ids=None):
+def insert_comment(DBSCHEMA, user_id, comment_text, parent_id=None, mentioned_user_ids=None):
     """
     Calls santova.InsertComment stored procedure.
     Supports optional mentions via JSON array.
@@ -16,11 +16,16 @@ def insert_comment(user_id, comment_text, parent_id=None, mentioned_user_ids=Non
     cursor = conn.cursor()
 
     try:
-        mentioned_json = json.dumps(mentioned_user_ids) if mentioned_user_ids else None
+        # Convert mentioned_user_ids to JSON string, or None if empty
+        if mentioned_user_ids and len(mentioned_user_ids) > 0:
+            mentioned_json = json.dumps(mentioned_user_ids)
+        else:
+            mentioned_json = None
 
-        sql = """
+        # Format DBSCHEMA into SQL string before execution
+        sql = f"""
         DECLARE @NewCommentID INT;
-        EXEC santova.InsertComment
+        EXEC {DBSCHEMA}.InsertComment
             @UserID = %s,
             @ParentID = %s,
             @CommentText = %s,
@@ -53,6 +58,10 @@ def add_comment(user_id, user_name):
     JWT provides user_id and user_name.
     """
     data = request.json
+    host = request.headers.get("Origin")
+    DBSCHEMA = "santova"
+    if host == "https://orbis-icat.alphalogix.tech":
+        DBSCHEMA = "ICAT"
     print("💡 Incoming payload:", data)
     comment_text = data.get("CommentText")
     parent_id = data.get("ParentID")
@@ -69,7 +78,7 @@ def add_comment(user_id, user_name):
     if not comment_text:
         return jsonify({"success": False, "message": "CommentText is required"}), 400
 
-    success, result = insert_comment(user_id, comment_text, parent_id, mentioned_user_ids)
+    success, result = insert_comment(DBSCHEMA, user_id, comment_text, parent_id, mentioned_user_ids)
 
     if success:
         return jsonify({
@@ -85,11 +94,11 @@ def add_comment(user_id, user_name):
         return jsonify({"success": False, "message": result}), 500
 
 
-def get_comments_with_reacts():
+def get_comments_with_reacts(DBSCHEMA):
     conn = connect_to_database()
     cursor = conn.cursor()
     try:
-        cursor.execute("EXEC santova.GetCommentsWithReacts")
+        cursor.execute(f"EXEC {DBSCHEMA}.GetCommentsWithReacts")
         results = cursor.fetchall()
 
         comments_dict = {}
@@ -136,7 +145,11 @@ def get_comments_with_reacts():
 @token_required
 def get_comments_route(user_id, user_name):
     try:
-        data = get_comments_with_reacts()
+        host = request.headers.get("Origin")
+        DBSCHEMA = "santova"
+        if host == "https://orbis-icat.alphalogix.tech":
+            DBSCHEMA = "ICAT"
+        data = get_comments_with_reacts(DBSCHEMA)
         return jsonify({"success": True, "data": data})
     except Exception as e:
         import traceback
@@ -146,7 +159,7 @@ def get_comments_route(user_id, user_name):
 
 
 # Get All React List
-def get_all_emojis():
+def get_all_emojis(DBSCHEMA):
     """
     Fetch all emojis from santova.Reacts using GetAllReacts SP.
     """
@@ -154,7 +167,7 @@ def get_all_emojis():
     cursor = conn.cursor()
     try:
         # Execute stored procedure
-        cursor.execute("EXEC santova.GetAllReacts")
+        cursor.execute(f"EXEC {DBSCHEMA}.GetAllReacts")
         results = cursor.fetchall()
         # Convert to list of dicts
         return [{"R_Id": row[0], "EmojiName": row[1]} for row in results]
@@ -168,27 +181,36 @@ def get_all_reacts_route(user_id, user_name):
     """
     API to get the list of all emojis (React list)
     """
-    data = get_all_emojis()
+    host = request.headers.get("Origin")
+    DBSCHEMA = "santova"
+    if host == "https://orbis-icat.alphalogix.tech":
+        DBSCHEMA = "ICAT"
+    data = get_all_emojis(DBSCHEMA)
     return jsonify({"success": True, "data": data})
 
 
 
-def insert_reaction(comment_id, user_id, r_id):
+def insert_reaction(DBSCHEMA, comment_id, user_id, r_id):
     """
     Inserts a reaction for a comment by a user.
+    The stored procedure will throw an error if the user has already reacted.
     """
     conn = connect_to_database()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "EXEC santova.InsertCmtReaction @CommentID=%s, @UserID=%s, @R_Id=%s",
+            f"EXEC {DBSCHEMA}.InsertCmtReaction @CommentID=%s, @UserID=%s, @R_Id=%s",
             (comment_id, user_id, r_id)
         )
         conn.commit()
         return True, "Reaction added successfully."
     except Exception as e:
         conn.rollback()
-        return False, str(e)
+        error_msg = str(e)
+        # Check if it's the "already reacted" error from the stored procedure
+        if "already reacted" in error_msg.lower() or "50001" in error_msg:
+            return False, "You have already reacted with this emoji on this comment."
+        return False, error_msg
     finally:
         cursor.close()
         conn.close()
@@ -203,17 +225,20 @@ def react_comment_route(user_id, user_name):
     data = request.json
     comment_id = data.get("CommentID")
     r_id = data.get("R_Id")
-
+    host = request.headers.get("Origin")
+    DBSCHEMA = "santova"
+    if host == "https://orbis-icat.alphalogix.tech":
+        DBSCHEMA = "ICAT"
     if not comment_id or not r_id:
         return jsonify({"success": False, "message": "CommentID and R_Id are required"}), 400
 
-    success, message = insert_reaction(comment_id, user_id, r_id)
+    success, message = insert_reaction(DBSCHEMA, comment_id, user_id, r_id)
     if success:
         return jsonify({"success": True, "message": message})
     else:
         return jsonify({"success": False, "message": message}), 500
 
-def delete_reaction(comment_id, user_id, r_id):
+def delete_reaction(DBSCHEMA, comment_id, user_id, r_id):
     """
     Deletes a user's specific emoji reaction from a comment.
     Only the same user who reacted can remove it.
@@ -222,9 +247,9 @@ def delete_reaction(comment_id, user_id, r_id):
     cursor = conn.cursor()
     try:
         # Check first if this reaction exists and belongs to the same user
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COUNT(*) 
-            FROM santova.UserReactMapping 
+            FROM {DBSCHEMA}.UserReactMapping 
             WHERE CommentID = %s AND UserID = %s AND R_Id = %s
         """, (comment_id, user_id, r_id))
         count = cursor.fetchone()[0]
@@ -234,7 +259,7 @@ def delete_reaction(comment_id, user_id, r_id):
 
         # ✅ Execute delete SP
         cursor.execute(
-            "EXEC santova.DeleteReact @CommentID=%s, @UserID=%s, @R_Id=%s",
+            f"EXEC {DBSCHEMA}.DeleteReact @CommentID=%s, @UserID=%s, @R_Id=%s",
             (comment_id, user_id, r_id)
         )
 
@@ -259,11 +284,14 @@ def delete_reaction_route(user_id, user_name):
     comment_id = data.get("CommentID")
     user_id = data.get("UserID")
     r_id = data.get("R_Id")
-
+    host = request.headers.get("Origin")
+    DBSCHEMA = "santova"
+    if host == "https://orbis-icat.alphalogix.tech":
+        DBSCHEMA = "ICAT"
     if not comment_id or not r_id:
         return jsonify({"success": False, "message": "CommentID and R_Id are required"}), 400
 
-    success, message = delete_reaction(comment_id, user_id, r_id)
+    success, message = delete_reaction(DBSCHEMA, comment_id, user_id, r_id)
     if success:
         return jsonify({"success": True, "message": message}), 200
     else:

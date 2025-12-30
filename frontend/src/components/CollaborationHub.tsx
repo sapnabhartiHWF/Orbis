@@ -2,7 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileManager } from "./FileManager"
 import { CommentSystem } from "./CommentSystem"
 import { ApprovalWorkflow } from "./ApprovalWorkflow"
-import { TeamAssignments } from "./TeamAssignments"
+import { TeamAssignments } from "./TeamAssignments" // Hidden for now
 
 interface CollaborationHubProps {
   processId?: string

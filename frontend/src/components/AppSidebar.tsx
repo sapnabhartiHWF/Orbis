@@ -7,7 +7,6 @@ import {
   Ticket, 
   BarChart3, 
   Kanban,
-  Bot,
   Shield,
   ChevronRight,
   Rocket,
@@ -16,9 +15,11 @@ import {
   Trophy,
   Zap,
   Settings,
-  TrendingUp
+  TrendingUp,
+  LogOut
 } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
 import {
   Sidebar,
   SidebarContent,
@@ -50,13 +51,6 @@ const navigationGroups = [
     label: "Automation Excellence",
     items: [
       { 
-        title: "Center of Excellence", 
-        url: "/center-of-excellence", 
-        icon: Rocket,
-        description: "Automation pipeline & innovation",
-        isNew: false
-      },
-      { 
         title: "Collaboration Hub", 
         url: "/collaboration-hub", 
         icon: Users,
@@ -64,36 +58,17 @@ const navigationGroups = [
         isNew: false
       },
       { 
+        title: "Center of Excellence", 
+        url: "/center-of-excellence", 
+        icon: Rocket,
+        description: "Automation pipeline & innovation",
+        isNew: false
+      },
+      { 
         title: "ROI Assessment", 
         url: "/roi-assessment-engine", 
         icon: Calculator,
         description: "Financial analysis & tracking",
-        isNew: false
-      }
-    ]
-  },
-  {
-    label: "Performance & Governance",
-    items: [
-      { 
-        title: "SLA & KPIs", 
-        url: "/sla", 
-        icon: Target,
-        description: "Performance tracking",
-        isNew: false
-      },
-      { 
-        title: "Rule Book", 
-        url: "/rules", 
-        icon: Book,
-        description: "Process rules & versions",
-        isNew: false
-      },
-      { 
-        title: "Exceptions", 
-        url: "/exceptions", 
-        icon: AlertTriangle,
-        description: "Error analysis & patterns",
         isNew: false
       }
     ]
@@ -130,6 +105,32 @@ const navigationGroups = [
         isNew: false
       }
     ]
+  },
+  {
+    label: "Performance & Governance",
+    items: [
+      { 
+        title: "SLA & KPIs", 
+        url: "/sla", 
+        icon: Target,
+        description: "Performance tracking",
+        isNew: false
+      },
+      { 
+        title: "Rule Book", 
+        url: "/rules", 
+        icon: Book,
+        description: "Process rules & versions",
+        isNew: false
+      },
+      { 
+        title: "Exceptions", 
+        url: "/exceptions", 
+        icon: AlertTriangle,
+        description: "Error analysis & patterns",
+        isNew: false
+      }
+    ]
   }
 ]
 
@@ -138,6 +139,19 @@ export function AppSidebar() {
   const location = useLocation()
   const currentPath = location.pathname
   const collapsed = state === "collapsed"
+  const { logout } = useAuth()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const isActive = (path: string) => {
     if (path === "/") return currentPath === "/"
@@ -161,8 +175,12 @@ export function AppSidebar() {
         <div className={`p-6 border-b border-border/50 ${collapsed ? "px-3 py-4" : ""}`}>
           {!collapsed ? (
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
-                <Bot className="w-5 h-5 text-primary-foreground" />
+              <div className="flex items-center justify-center">
+                <img 
+                  src="/ICAT-logo.svg" 
+                  alt="ICAT Logo" 
+                  className="h-10 w-auto"
+                />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-foreground">RPA Command</h1>
@@ -170,8 +188,12 @@ export function AppSidebar() {
               </div>
             </div>
           ) : (
-            <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center mx-auto shadow-glow">
-              <Bot className="w-5 h-5 text-primary-foreground" />
+            <div className="flex items-center justify-center mx-auto">
+              <img 
+                src="/ICAT-logo.svg" 
+                alt="ICAT Logo" 
+                className="h-10 w-auto"
+              />
             </div>
           )}
         </div>
@@ -230,26 +252,46 @@ export function AppSidebar() {
           ))}
         </div>
 
-        {/* Footer Status */}
+        {/* Footer Status and Logout */}
         {!collapsed && (
-          <div className="mt-auto p-6 border-t border-border/50">
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-success/10 border border-success/20 backdrop-blur-sm">
-              <div className="flex-shrink-0">
-                <div className="w-3 h-3 rounded-full bg-success animate-pulse shadow-glow"></div>
+          <div className="mt-auto border-t border-border/50">
+            <div className="p-6">
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-success/10 border border-success/20 backdrop-blur-sm mb-4">
+                <div className="flex-shrink-0">
+                  <div className="w-3 h-3 rounded-full bg-success animate-pulse shadow-glow"></div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-foreground">System Status</div>
+                  <div className="text-xs text-success font-medium">All systems operational • 99.9% uptime</div>
+                </div>
+                <Shield className="w-4 h-4 text-success opacity-80" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-foreground">System Status</div>
-                <div className="text-xs text-success font-medium">All systems operational • 99.9% uptime</div>
-              </div>
-              <Shield className="w-4 h-4 text-success opacity-80" />
+              <button
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 border border-red-500/20 text-red-600 hover:text-red-700 transition-all duration-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="text-sm">{isLoggingOut ? "Logging out..." : "Logout"}</span>
+              </button>
             </div>
           </div>
         )}
 
         {/* Collapsed Footer */}
         {collapsed && (
-          <div className="mt-auto p-3">
-            <div className="w-3 h-3 rounded-full bg-success animate-pulse mx-auto shadow-glow"></div>
+          <div className="mt-auto p-3 border-t border-border/50">
+            <div className="mb-3">
+              <div className="w-3 h-3 rounded-full bg-success animate-pulse mx-auto shadow-glow"></div>
+            </div>
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="w-full flex items-center justify-center p-3 rounded-xl bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 border border-red-500/20 text-red-600 hover:text-red-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         )}
       </SidebarContent>

@@ -180,6 +180,16 @@ const SupplierWiseException: React.FC<SupplierWiseExceptionProps> = ({ supplierN
                   bottom: 5,
                 }}
               >
+                <defs>
+                  <linearGradient id="gradient-exception-not-match" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={exceptionColors["INVOICES NOT MATCH"]} stopOpacity={1} />
+                    <stop offset="100%" stopColor={exceptionColors["INVOICES NOT MATCH"]} stopOpacity={0.6} />
+                  </linearGradient>
+                  <linearGradient id="gradient-exception-duplicate" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={exceptionColors["DUPLICATE INVOICE"]} stopOpacity={1} />
+                    <stop offset="100%" stopColor={exceptionColors["DUPLICATE INVOICE"]} stopOpacity={0.6} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
                 <XAxis
                   dataKey="supplierName"
@@ -199,8 +209,8 @@ const SupplierWiseException: React.FC<SupplierWiseExceptionProps> = ({ supplierN
                   content={<CustomTooltip />}
                 />
                 <Legend />
-                <Bar dataKey="INVOICES NOT MATCH" fill={exceptionColors["INVOICES NOT MATCH"]} />
-                <Bar dataKey="DUPLICATE INVOICE" fill={exceptionColors["DUPLICATE INVOICE"]} />
+                <Bar dataKey="INVOICES NOT MATCH" fill="url(#gradient-exception-not-match)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="DUPLICATE INVOICE" fill="url(#gradient-exception-duplicate)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )

@@ -28,7 +28,8 @@ interface SprintGoal {
   dependencies: string[]
 }
 
-const mockDevelopers: Developer[] = [
+const mockDevelopers: Developer[] = []
+/* [
   {
     id: "dev-1",
     name: "Sarah Chen",
@@ -53,9 +54,10 @@ const mockDevelopers: Developer[] = [
     skills: ["UI/UX", "Frontend", "Testing"],
     currentLoad: 30
   }
-]
+] */
 
-const mockSprintGoals: SprintGoal[] = [
+const mockSprintGoals: SprintGoal[] = []
+/* [
   {
     id: "goal-1",
     title: "Multi-currency API Integration",
@@ -96,7 +98,7 @@ const mockSprintGoals: SprintGoal[] = [
     status: "todo",
     dependencies: ["goal-2"]
   }
-]
+] */
 
 export function DevSprintPlanner() {
   const [currentSprint, setCurrentSprint] = useState("Sprint 24.3")
@@ -108,7 +110,7 @@ export function DevSprintPlanner() {
     completed: mockSprintGoals.filter(g => g.status === "done").reduce((sum, goal) => sum + goal.storyPoints, 0),
     inProgress: mockSprintGoals.filter(g => g.status === "in-progress").reduce((sum, goal) => sum + goal.storyPoints, 0),
     sprintProgress: 0,
-    velocity: 42 // Previous sprint velocity
+    velocity: 0 // Previous sprint velocity
   }
 
   sprintMetrics.sprintProgress = sprintMetrics.totalCommitted > 0 

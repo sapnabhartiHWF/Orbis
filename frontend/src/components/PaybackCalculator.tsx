@@ -24,14 +24,14 @@ export function PaybackCalculator() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all")
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>("60") // months
   
-  const departments = Array.from(new Set(dummyROICalculations.map(calc => calc.department)))
+  const departments = Array.from(new Set(([] as ROICalculation[]).map(calc => calc.department))) // dummyROICalculations
   
   const filteredCalculations = selectedDepartment === "all" 
-    ? dummyROICalculations 
-    : dummyROICalculations.filter(calc => calc.department === selectedDepartment)
+    ? [] as ROICalculation[] // dummyROICalculations 
+    : ([] as ROICalculation[]).filter(calc => calc.department === selectedDepartment) // dummyROICalculations
 
   // Generate payback analyses
-  const paybackAnalyses: PaybackAnalysis[] = filteredCalculations.map(calc => {
+  const paybackAnalyses: PaybackAnalysis[] = (filteredCalculations as ROICalculation[]).map(calc => {
     const investmentCost = Object.values(calc.implementationCosts).reduce((sum, cost) => sum + cost, 0)
     const annualSavings = calc.calculatedMetrics?.annualCostSavings || 0
     const paybackPeriod = calc.calculatedMetrics?.paybackPeriod || 0

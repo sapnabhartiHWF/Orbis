@@ -40,7 +40,8 @@ interface Team {
   completionRate: number
 }
 
-const teamMembers: TeamMember[] = [
+const teamMembers: TeamMember[] = []
+/* [
   {
     id: "TM001",
     name: "Sarah Chen",
@@ -126,9 +127,10 @@ const teamMembers: TeamMember[] = [
     currentProjects: 2,
     performanceRating: 4.5
   }
-]
+] */
 
-const teams: Team[] = [
+const teams: Team[] = []
+/* [
   {
     id: "T001",
     name: "Core Automation Team",
@@ -162,24 +164,24 @@ const teams: Team[] = [
     totalROI: 2100000,
     completionRate: 95.8
   }
-]
+] */
 
 const performanceTrendData = [
-  { month: "Jan", performance: 4.2, projects: 8, roi: 1800000 },
-  { month: "Feb", performance: 4.4, projects: 10, roi: 2100000 },
-  { month: "Mar", performance: 4.5, projects: 12, roi: 2400000 },
-  { month: "Apr", performance: 4.6, projects: 14, roi: 2800000 },
-  { month: "May", performance: 4.7, projects: 16, roi: 3200000 },
-  { month: "Jun", performance: 4.8, projects: 18, roi: 3600000 }
+  { month: "Jan", performance: 0, projects: 0, roi: 0 },
+  { month: "Feb", performance: 0, projects: 0, roi: 0 },
+  { month: "Mar", performance: 0, projects: 0, roi: 0 },
+  { month: "Apr", performance: 0, projects: 0, roi: 0 },
+  { month: "May", performance: 0, projects: 0, roi: 0 },
+  { month: "Jun", performance: 0, projects: 0, roi: 0 }
 ]
 
 const skillsRadarData = [
-  { skill: "Technical", A: 95, B: 87, C: 92 },
-  { skill: "Process", A: 88, B: 94, C: 85 },
-  { skill: "Communication", A: 92, B: 89, C: 96 },
-  { skill: "Innovation", A: 95, B: 87, C: 91 },
-  { skill: "Leadership", A: 89, B: 85, C: 94 },
-  { skill: "Collaboration", A: 96, B: 92, C: 89 }
+  { skill: "Technical", A: 0, B: 0, C: 0 },
+  { skill: "Process", A: 0, B: 0, C: 0 },
+  { skill: "Communication", A: 0, B: 0, C: 0 },
+  { skill: "Innovation", A: 0, B: 0, C: 0 },
+  { skill: "Leadership", A: 0, B: 0, C: 0 },
+  { skill: "Collaboration", A: 0, B: 0, C: 0 }
 ]
 
 const chartConfig = {
@@ -553,7 +555,7 @@ export function TeamPerformance() {
               <CardContent>
                 <div className="space-y-4">
                   {["Technical Skills", "Process Analysis", "Communication", "Innovation", "Leadership", "Collaboration"].map((skill, index) => {
-                    const avgScore = Math.floor(Math.random() * 20) + 80; // Mock data
+                    const avgScore = 0; // Mock data
                     return (
                       <div key={skill} className="space-y-2">
                         <div className="flex justify-between text-sm">
@@ -563,7 +565,7 @@ export function TeamPerformance() {
                         <Progress value={avgScore} className="h-3" />
                         <div className="flex justify-between text-xs text-muted-foreground">
                           <span>Team Average</span>
-                          <span>{Math.floor(Math.random() * 3) + 3} members proficient</span>
+                          <span>0 members proficient</span>
                         </div>
                       </div>
                     )

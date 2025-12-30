@@ -30,7 +30,8 @@ export default function Leaderboard() {
   const [selectedDepartment, setSelectedDepartment] = useState("all")
 
   // Mock data for leaderboard
-  const topContributors = [
+  const topContributors = []
+  /* [
     {
       id: 1,
       name: "Emma Thompson",
@@ -106,9 +107,10 @@ export default function Leaderboard() {
       monthlyRank: 5,
       previousRank: 7
     }
-  ]
+  ] */
 
-  const departmentRankings = [
+  const departmentRankings = []
+  /* [
     {
       name: "Operations",
       totalPoints: 8450,
@@ -154,9 +156,10 @@ export default function Leaderboard() {
       savings: 1200000,
       rank: 5
     }
-  ]
+  ] */
 
-  const achievementBadges = [
+  const achievementBadges = []
+  /* [
     {
       name: "Process Pioneer",
       description: "First to submit 10 automation processes",
@@ -205,9 +208,10 @@ export default function Leaderboard() {
       earned: 18,
       total: 156
     }
-  ]
+  ] */
 
-  const monthlyAwards = [
+  const monthlyAwards = []
+  /* [
     {
       category: "Top Contributor",
       winner: "Emma Thompson",
@@ -236,7 +240,7 @@ export default function Leaderboard() {
       achievement: "Jumped 2 positions in leaderboard",
       reward: "Mentorship program + skill certification"
     }
-  ]
+  ] */
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -513,7 +517,7 @@ export default function Leaderboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-primary-foreground">
                 <Gift className="w-5 h-5" />
-                Monthly Excellence Awards - October 2024
+                Monthly Excellence Awards{/* - October 2024 */}
               </CardTitle>
               <CardDescription className="text-primary-foreground/80">
                 Recognizing outstanding contributions and achievements this month

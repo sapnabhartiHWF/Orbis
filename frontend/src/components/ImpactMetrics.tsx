@@ -10,11 +10,11 @@ import { dummyROICalculations, ROICalculation } from "@/utils/roiCalculations"
 export function ImpactMetrics() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all")
   
-  const departments = Array.from(new Set(dummyROICalculations.map(calc => calc.department)))
+  const departments = Array.from(new Set([].map(calc => calc.department))) // dummyROICalculations
   
   const filteredCalculations = selectedDepartment === "all" 
-    ? dummyROICalculations 
-    : dummyROICalculations.filter(calc => calc.department === selectedDepartment)
+    ? [] // dummyROICalculations 
+    : [].filter(calc => calc.department === selectedDepartment) // dummyROICalculations
 
   // Calculate aggregate metrics
   const totalEfficiencyGain = filteredCalculations.reduce((sum, calc) => {

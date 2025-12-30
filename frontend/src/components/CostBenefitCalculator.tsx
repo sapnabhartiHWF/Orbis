@@ -31,25 +31,25 @@ export function CostBenefitCalculator({ onCalculationSave }: CostBenefitCalculat
     processName: '',
     department: 'Finance',
     currentState: {
-      annualVolume: 10000,
-      timePerTransaction: 20,
-      errorRate: 5,
-      resourceCost: 35,
-      annualOperatingCost: 50000
+      annualVolume: 0,
+      timePerTransaction: 0,
+      errorRate: 0,
+      resourceCost: 0,
+      annualOperatingCost: 0
     },
     proposedState: {
-      automationLevel: 80,
-      timePerTransaction: 5,
-      errorRate: 1,
-      maintenanceCost: 15000,
-      licensingCost: 20000
+      automationLevel: 0,
+      timePerTransaction: 0,
+      errorRate: 0,
+      maintenanceCost: 0,
+      licensingCost: 0
     },
     implementationCosts: {
-      development: 100000,
-      training: 20000,
-      infrastructure: 30000,
-      testing: 15000,
-      deployment: 10000
+      development: 0,
+      training: 0,
+      infrastructure: 0,
+      testing: 0,
+      deployment: 0
     }
   })
 
