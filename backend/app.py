@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from app.rulebook.rulebookendpoint import rulebook_blueprint
 from flask_cors import CORS
 from app.file_management.uploadpopup_api import process_api
+from app.file_management.process_onboarding import process_onboarding_bp
 from app.auth import auth_bp
 from app.file_management.file_management import file_bp
 from app.discussion import discussion_bp
@@ -78,6 +79,7 @@ def add_cors_headers(response):
 # Register Blueprints
 app.register_blueprint(rulebook_blueprint, url_prefix='/rulebook')
 app.register_blueprint(process_api)
+app.register_blueprint(process_onboarding_bp)
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(file_bp)
 app.register_blueprint(discussion_bp)

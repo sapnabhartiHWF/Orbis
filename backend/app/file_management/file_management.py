@@ -518,32 +518,6 @@ def organize_files_by_process(DBSCHEMA, files):
     return list(folder_structure.values())
 
 
-@file_bp.route('/api/files-folder-structure', methods=['GET'])
-@token_required
-def get_files_folder_structure_route(user_id, user_name):
-    """
-    Returns files organized in folder structure by process name.
-    """
-    file_type = request.args.get('fileType', 'all')
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
-
-    try:
-        # Get all files (no process_id filter to get all processes)
-        files = get_files_from_db(DBSCHEMA, None, file_type)
-        
-        # Organize by process name
-        folder_structure = organize_files_by_process(DBSCHEMA, files)
-
-        return jsonify({
-            'success': True,
-            'folderStructure': folder_structure
-        })
-
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @file_bp.route("/api/delete-uploaded-file", methods=["POST"])

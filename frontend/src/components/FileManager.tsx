@@ -70,6 +70,7 @@ import {
   getFileTypeIcon,
   getTimeAgo,
 } from "@/utils/collaborationUtils";
+import { createProcessOnboarding } from "@/services/processOnboardingApi";
 
 interface FileManagerProps {
   processId?: string;
@@ -78,18 +79,12 @@ interface FileManagerProps {
 const fileTypes = ["all", "document", "video", "flowchart", "image"];
 const staticTags = ["demo", "current-state", "training"];
 const url = "http://127.0.0.1:8000/api/processes";
-const uploadUrl =
-  "http://127.0.0.1:8000/api/file-management";
-const dataUrl =
-  "http://127.0.0.1:8000/api/uploaded-details";
-const folderStructureUrl =
-  "http://127.0.0.1:8000/api/files-folder-structure";
-const deleteUrl =
-  "http://127.0.0.1:8000/api/delete-uploaded-file";
-const triggerUrl =
-  "http://127.0.0.1:8000/api/trigger-file";
-const insertProcessUrl =
-  "http://127.0.0.1:8000/api/insert_process";
+const uploadUrl = "http://127.0.0.1:8000/api/file-management";
+const dataUrl = "http://127.0.0.1:8000/api/uploaded-details";
+const folderStructureUrl = "http://127.0.0.1:8000/api/files-folder-structure";
+const deleteUrl = "http://127.0.0.1:8000/api/delete-uploaded-file";
+const triggerUrl = "http://127.0.0.1:8000/api/trigger-file";
+const insertProcessUrl = "http://127.0.0.1:8000/api/insert_process";
 
 interface FolderStructure {
   processName: string;
@@ -155,14 +150,30 @@ export function FileManager({ processId }: FileManagerProps) {
       titleClass: "text-rose-800",
     },
   ];
-  const [selectedProcessIdLocal, setSelectedProcessIdLocal] = useState<string | null>(null);
-  const [selectedProcessNameLocal, setSelectedProcessNameLocal] = useState<string | null>(null);
+  const [selectedProcessIdLocal, setSelectedProcessIdLocal] = useState<
+    string | null
+  >(null);
+  const [selectedProcessNameLocal, setSelectedProcessNameLocal] = useState<
+    string | null
+  >(null);
 
   // Drag and drop state
   const [draggedFileId, setDraggedFileId] = useState<string | number | null>(
     null
   );
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Process Onboarding Wizard State
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [onboardingData, setOnboardingData] = useState({
+    processName: "",
+    ownedBy: "",
+    department: "",
+    description: "",
+    tags: "",
+  });
+  const onboardingSteps = ["Basic Info", "Additional Info", "Review & Submit"];
 
   // Fetch processes for upload popup
   useEffect(() => {
@@ -286,14 +297,17 @@ export function FileManager({ processId }: FileManagerProps) {
       try {
         const token = localStorage.getItem("token");
 
-        const folderRes = await fetch(`${folderStructureUrl}?fileType=${typeFilter}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
-        });
+        const folderRes = await fetch(
+          `${folderStructureUrl}?fileType=${typeFilter}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+          }
+        );
 
         if (folderRes.ok) {
           const folderData = await folderRes.json();
@@ -353,9 +367,9 @@ export function FileManager({ processId }: FileManagerProps) {
     // If the user selected a process tile locally, prefer that filter
     const matchesProcess = selectedProcessIdLocal
       ? // allow matching by processId or processName if available
-        (file.processId?.toString() === selectedProcessIdLocal ||
-          (selectedProcessNameLocal &&
-            file.processName === selectedProcessNameLocal))
+        file.processId?.toString() === selectedProcessIdLocal ||
+        (selectedProcessNameLocal &&
+          file.processName === selectedProcessNameLocal)
       : !processId || file.processId?.toString() === processId;
     return matchesSearch && matchesType && matchesProcess;
   });
@@ -982,15 +996,495 @@ export function FileManager({ processId }: FileManagerProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header with Upload Button */}
-      <div className="flex items-center">
+      {/* Upload Modal (restored original UI/UX) */}
+      <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Upload Process Files</DialogTitle>
+            <DialogDescription>
+              Upload documents, videos, flowcharts, and other process-related
+              files
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-8 text-center bg-muted/20 cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+
+              {selectedFiles.length === 0 ? (
+                <>
+                  <h4 className="font-medium mb-2">
+                    Drop files here or click to browse
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Supports PDF, Word, Excel, PowerPoint, Images, and Videos
+                    (Max 50MB)
+                  </p>
+                </>
+              ) : (
+                <div className="text-base text-muted-foreground mb-4">
+                  {selectedFiles.map((f) => f.name).join(", ")}
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+              >
+                Choose Files
+              </Button>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*,video/*"
+                onChange={(e) => {
+                  if (e.target.files) {
+                    const files = Array.from(e.target.files);
+                    setSelectedFiles(files);
+                  }
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="file-type">File Type</Label>
+                <Select
+                  value={uploadFileType}
+                  onValueChange={setUploadFileType}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="document">Document</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="flowchart">Flowchart</SelectItem>
+                    <SelectItem value="image">Image</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="inline-flex items-center">
+                  Processes <span className="text-red-500 ml-1">*</span>
+                </Label>
+
+                <Select
+                  value={uploadProcessId}
+                  onValueChange={setUploadProcessId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Process" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {processes.length > 0 ? (
+                      processes.map((p) => (
+                        <SelectItem
+                          key={p.CompanyId}
+                          value={p.CompanyId.toString()}
+                        >
+                          {p.Name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>
+                        No processes available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                placeholder="Brief description of the file contents and purpose..."
+                className="min-h-20"
+                value={uploadDescription}
+                onChange={(e) => setUploadDescription(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tags</Label>
+              <div className="flex gap-4">
+                {staticTags.map((tag) => (
+                  <div key={tag} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={tag}
+                      checked={selectedTags.includes(tag)}
+                      onCheckedChange={(checked) => {
+                        setSelectedTags((prev) =>
+                          checked
+                            ? [...prev, tag]
+                            : prev.filter((t) => t !== tag)
+                        );
+                      }}
+                    />
+                    <label
+                      htmlFor={tag}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {tag}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {isUploading && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Uploading...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsUploadOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleFileUpload} disabled={isUploading}>
+              {isUploading ? "Uploading..." : "Upload Files"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Header with Upload Button and Process Onboarding Button */}
+      <div className="flex items-center justify-between">
         <div>
           <h3 className="text-2xl font-semibold">File Management</h3>
           <p className="text-muted-foreground">
             Upload and manage process documentation
           </p>
         </div>
+        <button
+          className="ml-auto px-5 py-2 rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold shadow hover:from-blue-600 hover:to-indigo-700 transition-all duration-200"
+          onClick={() => {
+            setIsOnboardingOpen(true);
+            setOnboardingStep(0);
+          }}
+        >
+          Process Onboarding
+        </button>
       </div>
+
+      {/* Process Onboarding Wizard Dialog */}
+      <Dialog open={isOnboardingOpen} onOpenChange={setIsOnboardingOpen}>
+        <DialogContent className="max-w-4xl min-w-[720px] p-0 overflow-visible bg-gradient-to-br from-white via-blue-50 to-indigo-50 shadow-2xl rounded-3xl border-0">
+          <div className="flex flex-col gap-0">
+            {/* Stepper */}
+            <div className="flex items-center justify-between px-14 pt-12 pb-4">
+              <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Process Onboarding
+              </h2>
+              <div className="flex items-center gap-2">
+                {onboardingSteps.map((step, idx) => (
+                  <div key={step} className="flex flex-col items-center">
+                    <div
+                      className={`w-7 h-7 flex items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                        onboardingStep === idx
+                          ? "bg-indigo-600 border-indigo-600 text-white shadow-lg"
+                          : "bg-white border-gray-300 text-gray-400"
+                      } font-bold text-base`}
+                    >
+                      {idx + 1}
+                    </div>
+                    <span
+                      className={`text-xs mt-1 ${
+                        onboardingStep === idx
+                          ? "text-indigo-700 font-semibold"
+                          : "text-gray-400"
+                      }`}
+                    >
+                      {step}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Progress Bar */}
+            <div className="w-full px-14">
+              <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-2 bg-gradient-to-r from-indigo-500 to-blue-400 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${
+                      ((onboardingStep + 1) / onboardingSteps.length) * 100
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+            {/* Wizard Steps */}
+            <div className="px-14 py-10 min-h-[340px] transition-all duration-300">
+              {onboardingStep === 0 && (
+                <div className="space-y-6 animate-fade-in">
+                  <div>
+                    <h3 className="text-lg font-semibold text-indigo-700 mb-2">
+                      Basic Information
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Process Name
+                      </label>
+                      <input
+                        className="w-full border border-gray-300 rounded-xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all shadow-lg"
+                        value={onboardingData.processName}
+                        onChange={(e) =>
+                          setOnboardingData((d) => ({
+                            ...d,
+                            processName: e.target.value,
+                          }))
+                        }
+                        placeholder="Enter process name"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Owned By
+                      </label>
+                      <input
+                        className="w-full border border-gray-300 rounded-xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all shadow-lg"
+                        value={onboardingData.ownedBy}
+                        onChange={(e) =>
+                          setOnboardingData((d) => ({
+                            ...d,
+                            ownedBy: e.target.value,
+                          }))
+                        }
+                        placeholder="Owner name or team"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Department
+                      </label>
+                      <input
+                        className="w-full border border-gray-300 rounded-xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all shadow-lg"
+                        value={onboardingData.department}
+                        onChange={(e) =>
+                          setOnboardingData((d) => ({
+                            ...d,
+                            department: e.target.value,
+                          }))
+                        }
+                        placeholder="Department name"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {onboardingStep === 1 && (
+                <div className="space-y-6 animate-fade-in">
+                  <div>
+                    <h3 className="text-lg font-semibold text-indigo-700 mb-2">
+                      Additional Information
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Description{" "}
+                        <span className="text-gray-400 text-xs">
+                          (optional)
+                        </span>
+                      </label>
+                      <textarea
+                        className="w-full border border-gray-300 rounded-xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all shadow-lg min-h-[90px]"
+                        value={onboardingData.description}
+                        onChange={(e) =>
+                          setOnboardingData((d) => ({
+                            ...d,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="Describe the process"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tags{" "}
+                        <span className="text-gray-400 text-xs">
+                          (comma separated)
+                        </span>
+                      </label>
+                      <input
+                        className="w-full border border-gray-300 rounded-xl px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all shadow-lg"
+                        value={onboardingData.tags}
+                        onChange={(e) =>
+                          setOnboardingData((d) => ({
+                            ...d,
+                            tags: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. finance, hr, automation"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {onboardingStep === 2 && (
+                <div className="space-y-8 animate-fade-in">
+                  <div>
+                    <h3 className="text-xl font-bold text-indigo-800 mb-4 tracking-wide">
+                      Review & Submit
+                    </h3>
+                  </div>
+                  <div className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-2xl p-8 border border-indigo-200 shadow-lg">
+                    <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4 text-lg">
+                      <div className="flex flex-col">
+                        <dt className="font-semibold text-gray-700 mb-1">
+                          Process Name
+                        </dt>
+                        <dd className="text-gray-900 pl-1">
+                          {onboardingData.processName || (
+                            <span className="italic text-gray-400">N/A</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex flex-col">
+                        <dt className="font-semibold text-gray-700 mb-1">
+                          Owned By
+                        </dt>
+                        <dd className="text-gray-900 pl-1">
+                          {onboardingData.ownedBy || (
+                            <span className="italic text-gray-400">N/A</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex flex-col">
+                        <dt className="font-semibold text-gray-700 mb-1">
+                          Department
+                        </dt>
+                        <dd className="text-gray-900 pl-1">
+                          {onboardingData.department || (
+                            <span className="italic text-gray-400">N/A</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex flex-col">
+                        <dt className="font-semibold text-gray-700 mb-1">
+                          Tags
+                        </dt>
+                        <dd className="text-gray-700 pl-1">
+                          {onboardingData.tags ? (
+                            onboardingData.tags
+                          ) : (
+                            <span className="italic text-gray-400">N/A</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex flex-col">
+                        <dt className="font-semibold text-gray-700 mb-1">
+                          Description
+                        </dt>
+                        <dd className="text-gray-700 pl-1">
+                          {onboardingData.description ? (
+                            onboardingData.description
+                          ) : (
+                            <span className="italic text-gray-400">N/A</span>
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div className="text-sm text-gray-500 font-medium mt-2">
+                    Please review the details above before submitting. You can
+                    go back to edit if needed.
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Wizard Navigation */}
+            <div className="flex justify-between items-center px-14 pb-10 pt-4">
+              <button
+                className="px-7 py-3 rounded-xl bg-gray-100 text-gray-700 text-lg font-semibold hover:bg-gray-200 transition-all border border-gray-200 shadow-lg disabled:opacity-60"
+                disabled={onboardingStep === 0}
+                onClick={() => setOnboardingStep((s) => Math.max(0, s - 1))}
+              >
+                Back
+              </button>
+              {onboardingStep < onboardingSteps.length - 1 ? (
+                <button
+                  className="px-10 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 text-white text-lg font-bold shadow-xl hover:from-indigo-600 hover:to-blue-600 transition-all duration-200 disabled:opacity-60"
+                  onClick={() => setOnboardingStep((s) => s + 1)}
+                  disabled={
+                    onboardingStep === 0 &&
+                    (!onboardingData.processName ||
+                      !onboardingData.ownedBy ||
+                      !onboardingData.department)
+                  }
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  className="px-7 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold shadow hover:from-green-600 hover:to-emerald-600 transition-all duration-200"
+                  onClick={async () => {
+                    const token = localStorage.getItem("token");
+                    if (!token) {
+                      toast({
+                        title: "Authentication required",
+                        description: "Please log in to submit onboarding.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    const payload = {
+                      Name: onboardingData.processName,
+                      OwnedBy: onboardingData.ownedBy,
+                      Department: onboardingData.department,
+                      Description: onboardingData.description,
+                      Tag: onboardingData.tags,
+                    };
+
+                    try {
+                      await createProcessOnboarding(payload, token);
+
+                      toast({
+                        title: "Process Onboarding Submitted",
+                        description: `Process "${onboardingData.processName}" has been submitted for onboarding!`,
+                        variant: "default",
+                      });
+
+                      setIsOnboardingOpen(false);
+                      await refreshFolderStructure();
+                    } catch (error: any) {
+                      toast({
+                        title: "Submission failed",
+                        description:
+                          error.message ||
+                          "An error occurred while submitting onboarding.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  Submit
+                </button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Fixed Process Folders (user must select one before uploading) */}
       {/* Show full grid when no selection; when selected, hide other folders and show selected + back button */}
@@ -1009,7 +1503,9 @@ export function FileManager({ processId }: FileManagerProps) {
               >
                 ← Back
               </Button>
-              <h4 className="text-lg font-semibold m-0">{selectedProcessNameLocal}</h4>
+              <h4 className="text-lg font-semibold m-0">
+                {selectedProcessNameLocal}
+              </h4>
             </div>
             <Button
               className="bg-gradient-primary text-primary-foreground hover:shadow-glow"
@@ -1024,7 +1520,7 @@ export function FileManager({ processId }: FileManagerProps) {
           </div>
         </div>
       ) : (
-  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8 py-8 bg-white px-4 rounded-xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8 py-8 bg-white px-4 rounded-xl">
           {processTemplates.map((p) => {
             const selected = selectedProcessIdLocal === p.id;
             return (
@@ -1042,12 +1538,18 @@ export function FileManager({ processId }: FileManagerProps) {
                     : "border-border hover:shadow-sm"
                 } ${p.bgClass}`}
               >
-                <div className={`w-20 h-20 rounded-md flex items-center justify-center shrink-0 ${p.iconBgClass}`}>
+                <div
+                  className={`w-20 h-20 rounded-md flex items-center justify-center shrink-0 ${p.iconBgClass}`}
+                >
                   <Folder className="w-10 h-10" />
                 </div>
                 <div className="text-left">
-                  <div className={`font-semibold text-2xl ${p.titleClass}`}>{p.name}</div>
-                  <div className="text-sm text-muted-foreground">Click to select</div>
+                  <div className={`font-semibold text-2xl ${p.titleClass}`}>
+                    {p.name}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Click to select
+                  </div>
                 </div>
               </button>
             );
@@ -1178,7 +1680,11 @@ export function FileManager({ processId }: FileManagerProps) {
                   }`}
                   onClick={() => setSelectedFile(file)}
                 >
-                  <CardContent className={`${viewMode === "grid" ? "p-6" : "p-4"} overflow-hidden`}>
+                  <CardContent
+                    className={`${
+                      viewMode === "grid" ? "p-6" : "p-4"
+                    } overflow-hidden`}
+                  >
                     {/* reuse inner content as-is */}
                     <div
                       className={`${
@@ -1197,34 +1703,40 @@ export function FileManager({ processId }: FileManagerProps) {
                       >
                         {viewMode === "grid" ? (
                           <div className="flex items-start justify-between gap-3">
-                            <div
-                              className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0"
-                            >
+                            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
                               {getFileTypeIcon(file.format)}
                             </div>
                             <Button
                               size="sm"
                               className={`flex-shrink-0 ${
-                                file.isTriggered || file.triggerStatus === "Triggered"
+                                file.isTriggered ||
+                                file.triggerStatus === "Triggered"
                                   ? "bg-success/20 text-success border-success/30 hover:bg-success/30"
                                   : "bg-gradient-primary text-primary-foreground hover:shadow-glow"
                               }`}
                               onClick={(e) => handleTrigger(file, e)}
-                              disabled={isUploading || file.isTriggered || file.triggerStatus === "Triggered"}
+                              disabled={
+                                isUploading ||
+                                file.isTriggered ||
+                                file.triggerStatus === "Triggered"
+                              }
                             >
-                              {file.isTriggered || file.triggerStatus === "Triggered" ? "Triggered" : "Trigger"}
+                              {file.isTriggered ||
+                              file.triggerStatus === "Triggered"
+                                ? "Triggered"
+                                : "Trigger"}
                             </Button>
                           </div>
                         ) : (
-                          <div
-                            className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0"
-                          >
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
                             {getFileTypeIcon(file.format)}
                           </div>
                         )}
 
                         <div
-                          className={`${viewMode === "grid" ? "w-full" : "flex-1"} overflow-hidden`}
+                          className={`${
+                            viewMode === "grid" ? "w-full" : "flex-1"
+                          } overflow-hidden`}
                         >
                           <div className="flex items-start gap-2 mb-1 w-full overflow-hidden">
                             <div className="flex-1 min-w-0 overflow-hidden">
@@ -1233,8 +1745,8 @@ export function FileManager({ processId }: FileManagerProps) {
                                   <TooltipTrigger asChild>
                                     <h4
                                       className={`font-medium group-hover:text-primary transition-colors w-full break-words ${
-                                        file.name.length > 50 
-                                          ? "line-clamp-2" 
+                                        file.name.length > 50
+                                          ? "line-clamp-2"
                                           : "truncate"
                                       }`}
                                       title={file.name}
@@ -1243,7 +1755,9 @@ export function FileManager({ processId }: FileManagerProps) {
                                     </h4>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p className="max-w-xs break-words">{file.name}</p>
+                                    <p className="max-w-xs break-words">
+                                      {file.name}
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -1272,15 +1786,20 @@ export function FileManager({ processId }: FileManagerProps) {
                               <Clock className="w-3 h-3" />
                               {file.uploadedAt ? (
                                 <span className="text-xs">
-                                  {new Date(file.uploadedAt).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric',
-                                    timeZone: 'UTC'
-                                  })}
+                                  {new Date(file.uploadedAt).toLocaleDateString(
+                                    "en-US",
+                                    {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                      timeZone: "UTC",
+                                    }
+                                  )}
                                 </span>
                               ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
                               )}
                             </div>
                             <span>{formatFileSize(file.size)}</span>
@@ -1352,14 +1871,20 @@ export function FileManager({ processId }: FileManagerProps) {
                                     size="icon"
                                     variant="default"
                                     className={
-                                      file.isTriggered || file.triggerStatus === "Triggered"
+                                      file.isTriggered ||
+                                      file.triggerStatus === "Triggered"
                                         ? "bg-success/20 text-success border-success/30 hover:bg-success/30"
                                         : "bg-gradient-primary text-primary-foreground hover:shadow-glow"
                                     }
                                     onClick={(e) => handleTrigger(file, e)}
-                                    disabled={isUploading || file.isTriggered || file.triggerStatus === "Triggered"}
+                                    disabled={
+                                      isUploading ||
+                                      file.isTriggered ||
+                                      file.triggerStatus === "Triggered"
+                                    }
                                   >
-                                    {file.isTriggered || file.triggerStatus === "Triggered" ? (
+                                    {file.isTriggered ||
+                                    file.triggerStatus === "Triggered" ? (
                                       <CheckCircle className="w-4 h-4" />
                                     ) : (
                                       <Play className="w-4 h-4" />
@@ -1367,7 +1892,12 @@ export function FileManager({ processId }: FileManagerProps) {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>{file.isTriggered || file.triggerStatus === "Triggered" ? "Already Triggered" : "Trigger Process"}</p>
+                                  <p>
+                                    {file.isTriggered ||
+                                    file.triggerStatus === "Triggered"
+                                      ? "Already Triggered"
+                                      : "Trigger Process"}
+                                  </p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -1390,7 +1920,9 @@ export function FileManager({ processId }: FileManagerProps) {
                                 Delete File
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => setSelectedFile(file)}>
+                              <DropdownMenuItem
+                                onClick={() => setSelectedFile(file)}
+                              >
                                 <FileText className="w-4 h-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>
