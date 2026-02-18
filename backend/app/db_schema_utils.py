@@ -5,38 +5,54 @@ Provides shared functions to determine which database schema to use based on the
 from flask import request
 
 
-def get_airline_schema():
+def get_bot_schema():
     """
-    Get AirlineProcessHeaderDetail schema for ICAT URLs, same logic as get_db_schema().
-    These endpoints (Bots, Operations, Exceptions) use AirlineProcessHeaderDetail schema for ICAT URL,
-    and default to "santova" for other URLs (though tables may not exist there).
+    Get schema for Bots/Operations (uses db_connect - connects to db_Icat database).
+    
+    For ICAT URL: Returns "AirlineProcessHeaderDetail" (db_Icat database)
+    For santova URL: Returns "santova" (db_Icat database)
+    For localhost/development: Returns "AirlineProcessHeaderDetail" (default, db_Icat database)
     
     Returns:
-        str: "AirlineProcessHeaderDetail" for ICAT URLs (https://orbis-icat.alphalogix.tech/), 
-             "santova" for other URLs (same logic as get_db_schema)
+        str: 
+            - "AirlineProcessHeaderDetail" for https://orbis-icat.alphalogix.tech/ or localhost/development (default)
+            - "santova" for https://orbis-santova.alphalogix.tech/
+            - "AirlineProcessHeaderDetail" by default (for all other cases)
     """
     host = request.headers.get("Origin") or request.headers.get("Referer") or ""
-    SCHEMA = "santova"  # Default schema for non-ICAT URLs (same as get_db_schema)
+    host_lower = host.lower() if host else ""
     
-    # Check for ICAT schema - support multiple possible origins (same logic as get_db_schema)
-    icat_origins = [
-        "https://orbis-icat.alphalogix.tech",
-        "http://orbis-icat.alphalogix.tech",
-        "orbis-icat.alphalogix.tech",
-        "icat.alphalogix.tech"
-    ]
+    # Default to AirlineProcessHeaderDetail (for localhost, empty, or ICAT hosts)
+    # This matches the ICAT schema default logic
+    SCHEMA = "AirlineProcessHeaderDetail"
     
-    # Check if host contains any ICAT identifier (same logic as get_db_schema)
-    if host:
-        host_lower = host.lower()
-        # Check for exact match or contains ICAT
-        if any(icat_origin.lower() in host_lower for icat_origin in icat_origins) or "icat" in host_lower:
+    if host_lower:
+        # Check for exact ICAT production URL
+        if "orbis-icat.alphalogix.tech" in host_lower:
             SCHEMA = "AirlineProcessHeaderDetail"
-            print(f"Using AirlineProcessHeaderDetail schema for origin: {host}")
+            print(f"[BOT_SCHEMA] ✅ ICAT production URL detected: '{host}' → Schema: 'AirlineProcessHeaderDetail'")
+        # Check for exact santova production URL
+        elif "orbis-santova.alphalogix.tech" in host_lower:
+            SCHEMA = "santova"
+            print(f"[BOT_SCHEMA] ⚠️ Santova production URL detected: '{host}' → Schema: 'santova'")
+        # Check if it's localhost/127.0.0.1/local development
+        elif any(local in host_lower for local in [
+            "localhost", 
+            "127.0.0.1", 
+            "0.0.0.0", 
+            "::1",
+            "local"
+        ]):
+            SCHEMA = "AirlineProcessHeaderDetail"
+            print(f"[BOT_SCHEMA] ✅ Localhost/development detected: '{host}' → Schema: 'AirlineProcessHeaderDetail' (default - matching ICAT default)")
         else:
-            print(f"Using santova schema for origin: {host}")
+            # Any other URL defaults to AirlineProcessHeaderDetail (matching ICAT default)
+            SCHEMA = "AirlineProcessHeaderDetail"
+            print(f"[BOT_SCHEMA] ✅ Other host (defaulting to AirlineProcessHeaderDetail): '{host}' → Schema: 'AirlineProcessHeaderDetail'")
     else:
-        print("No Origin/Referer header found, defaulting to santova schema")
+        # Empty host defaults to AirlineProcessHeaderDetail (matching ICAT default)
+        SCHEMA = "AirlineProcessHeaderDetail"
+        print(f"[BOT_SCHEMA] ✅ Empty host → Schema: 'AirlineProcessHeaderDetail' (default - matching ICAT default)")
     
     return SCHEMA
 

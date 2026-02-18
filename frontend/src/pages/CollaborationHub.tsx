@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { 
   Users, 
   FileText, 
@@ -13,12 +13,48 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CollaborationHub as CollaborationHubComponent } from "@/components/CollaborationHub"
 
 export default function CollaborationHub() {
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [discussionCount, setDiscussionCount] = useState(0);
+
+  // Fetch discussion count on mount
+  useEffect(() => {
+    const fetchDiscussionCount = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch('http://127.0.0.1:8000/api/get-comment-count', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+          setDiscussionCount(data.count);
+        }
+      } catch (error) {
+        console.error('Error fetching discussion count:', error);
+      }
+    };
+
+    fetchDiscussionCount();
+  }, []);
+
+  // Handler to receive file counts from FileManager
+  const handleFileCountsChange = (counts: Record<string, number>) => {
+    // Sum all file counts from all processes
+    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    setTotalFiles(total);
+    console.log("📊 File counts updated:", counts, "Total:", total); // Debug log
+  };
+
   // Stats for the overview
   const collaborationStats = {
-    activeFiles: 0,
-    openDiscussions: 0,
-    pendingApprovals: 0,
-    teamMembers: 0
+    totalFiles: totalFiles,
+    openDiscussions: discussionCount,
+    successFiles: 0,
+    fileInProgress: 0
   }
 
   return (
@@ -42,14 +78,14 @@ export default function CollaborationHub() {
           </div>
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="bg-gradient-primary border-primary/30 shadow-glow">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="bg-gradient-to-br from-violet-500 to-violet-700 border-violet-400/30 shadow-glow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-primary-foreground/80 text-sm font-medium">Active Files</p>
+                    <p className="text-primary-foreground/80 text-sm font-medium">Total Files</p>
                     <p className="text-2xl font-bold text-primary-foreground">
-                      {collaborationStats.activeFiles}
+                      {collaborationStats.totalFiles}
                     </p>
                   </div>
                   <FileText className="w-8 h-8 text-primary-foreground/80" />
@@ -57,7 +93,7 @@ export default function CollaborationHub() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-success border-success/30 shadow-glow">
+            <Card className="bg-gradient-primary border-primary/30 shadow-glow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -70,40 +106,12 @@ export default function CollaborationHub() {
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="bg-gradient-warning border-warning/30 shadow-glow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-warning-foreground/80 text-sm font-medium">Pending Approvals</p>
-                    <p className="text-2xl font-bold text-warning-foreground">
-                      {collaborationStats.pendingApprovals}
-                    </p>
-                  </div>
-                  <Clock className="w-8 h-8 text-warning-foreground/80" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border shadow-card">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-muted-foreground text-sm font-medium">Team Members</p>
-                    <p className="text-2xl font-bold text-foreground">
-                      {collaborationStats.teamMembers}
-                    </p>
-                  </div>
-                  <Users className="w-8 h-8 text-muted-foreground" />
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>
 
-      {/* Main Collaboration Hub Component */}
-      <CollaborationHubComponent />
+      {/* Pass the handler to CollaborationHubComponent */}
+      <CollaborationHubComponent onFileCountsChange={handleFileCountsChange} />
     </div>
   )
 }

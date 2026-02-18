@@ -65,11 +65,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Logout function - calls backend API and clears auth
   const logout = useCallback(async () => {
     const token = localStorage.getItem('token');
-    
+
     // Call logout API if token exists
     if (token) {
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://basic-vivyan-vivek1902-64809d2b.koyeb.app";
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
         await fetch(`${API_BASE_URL}/api/auth/logout`, {
           method: "POST",
           headers: {
@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error("Logout API error:", error);
       }
     }
-    
+
     // Clear all auth-related data
     localStorage.removeItem('token');
     localStorage.removeItem('auth_token');
@@ -92,10 +92,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('roleId');
     localStorage.removeItem('companyIds');
     localStorage.removeItem('companyNames');
-    
+
     setIsAuthenticated(false);
     setUser(null);
-    
+
     // Navigate to login page using React Router (no page refresh)
     navigate('/', { replace: true });
   }, [navigate]);

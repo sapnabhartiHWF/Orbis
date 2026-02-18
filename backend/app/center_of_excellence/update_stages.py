@@ -1,7 +1,7 @@
 from flask import request, jsonify, current_app
 from app.Database.connection import connect_to_database
 from app.auth_middleware import token_required
-from app.center_of_excellence.process_registration import process_registration_bp, format_datetime_for_json, get_db_schema
+from app.center_of_excellence.process_stages import process_stages_bp, format_datetime_for_json, get_db_schema
 import os
 
 def get_updated_stage_name(cursor, DBSCHEMA, process_id):
@@ -91,9 +91,11 @@ def get_approval_review_notification(stage_name=None):
             "Data has been updated in previous stages. Please review the updated data and approve again."
         )
 
-@process_registration_bp.route('/api/process-registration/<int:process_id>', methods=['PUT'])
+@process_stages_bp.route('/api/process-registration/<int:process_id>', methods=['PUT'])
 @token_required
-def update_process_registration(user_id, user_name, process_id):
+def update_process_registration(process_id):
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Update an existing process registration.
     Calls santova.UpdateProcessRegistration stored procedure.
@@ -239,9 +241,11 @@ def update_process_registration(user_id, user_name, process_id):
         if conn:
             conn.close()
 
-@process_registration_bp.route('/api/initial-triage/<int:process_id>', methods=['PUT'])
+@process_stages_bp.route('/api/initial-triage/<int:process_id>', methods=['PUT'])
 @token_required
-def update_initalTriage_stages(user_id, user_name, process_id):
+def update_initalTriage_stages(process_id):
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Update an existing initial triage stage.
     Calls santova.UpdateInitialTriageStage stored procedure.
@@ -346,9 +350,11 @@ def update_initalTriage_stages(user_id, user_name, process_id):
         if conn:
             conn.close()
 
-@process_registration_bp.route('/api/system-integration/<int:process_id>', methods=['PUT'])
+@process_stages_bp.route('/api/system-integration/<int:process_id>', methods=['PUT'])
 @token_required
-def update_systemIntegration_stages(user_id, user_name, process_id):
+def update_systemIntegration_stages(process_id):
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Update an existing system integration stage.
     Calls santova.UpdateSystemIntegration stored procedure.
@@ -461,9 +467,11 @@ def update_systemIntegration_stages(user_id, user_name, process_id):
         if conn:
             conn.close()
 
-@process_registration_bp.route('/api/to-be-design/<int:process_id>', methods=['PUT'])
+@process_stages_bp.route('/api/to-be-design/<int:process_id>', methods=['PUT'])
 @token_required
-def update_toBeDesign_stages(user_id, user_name, process_id):
+def update_toBeDesign_stages(process_id):
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Update an existing to be design stage.
     Files must be uploaded via multipart/form-data.
@@ -674,349 +682,6 @@ def update_toBeDesign_stages(user_id, user_name, process_id):
         if "not found" in error_message.lower() or "does not exist" in error_message.lower():
             return jsonify({"success": False, "message": "To-be design stage not found"}), 404
         return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-@process_registration_bp.route('/api/approval-stage/<int:process_id>', methods=['PUT'])
-@token_required
-def update_approval_stage(user_id, user_name, process_id):
-    """
-    Update an existing approval stage and (when fully approved) move to the next stage.
-    Calls:
-      - santova.UpdateApprovalStage   → updates approval data
-      - santova.SubmitStageAndMoveNext (when both approvals are completed) → moves stage forward
-    Note: First gets A_id from process_id, then updates using A_id.
-    """
-    conn = None
-    cursor = None
-    
-    try:            
-        DBSCHEMA = get_db_schema()
-        data = request.get_json()
-        
-        a_id = data.get('A_id') or data.get('A_Id') or data.get('AId') or data.get('ApprovalId')
-        business_owner_approval = data.get('BusinessOwnerApproval')
-        bo_approval_note = data.get('BO_ApprovalNote')
-        bo_approval_status = data.get('BO_approval_status')
-        rpa_approval = data.get('RPA_Approval')
-        rpa_approval_note = data.get('RPA_ApprovalNote')
-        rpa_approval_status = data.get('RPA_approval_status')
-        
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        
-        if not a_id:
-            cursor.execute(
-                f"SELECT TOP 1 A_id FROM {DBSCHEMA}.ApprovalStage WHERE process_id = %s AND IsDeleted = 0 ORDER BY A_id DESC",
-                (process_id,)
-            )
-            a_id_result = cursor.fetchone()
-            if not a_id_result:
-                return jsonify({"success": False, "message": "Approval stage not found for this process"}), 404
-            a_id = a_id_result[0]
-        
-        # CRITICAL: Fetch current approval values to preserve the one not being updated
-        cursor.execute(
-            f"SELECT BusinessOwnerApproval, RPA_Approval, ApprovalNeedsReview, BO_ApprovalNote, RPA_ApprovalNote FROM {DBSCHEMA}.ApprovalStage WHERE A_id = %s AND IsDeleted = 0",
-            (a_id,)
-        )
-        current_approval_result = cursor.fetchone()
-        current_bo_approval = None
-        current_rpa_approval = None
-        prev_approval_needs_review = 0
-        current_bo_note = None
-        current_rpa_note = None
-        
-        if current_approval_result:
-            current_bo_approval = current_approval_result[0]
-            current_rpa_approval = current_approval_result[1]
-            prev_approval_needs_review = current_approval_result[2] if current_approval_result[2] is not None else 0
-            current_bo_note = current_approval_result[3] if len(current_approval_result) > 3 else None
-            current_rpa_note = current_approval_result[4] if len(current_approval_result) > 4 else None
-        
-        # Only update the approval that was explicitly provided
-        # CRITICAL: Pass NULL to stored procedure for fields we don't want to update
-        # The SP checks "IF @BusinessOwnerApproval IS NOT NULL" so NULL means "don't update"
-        if business_owner_approval is not None:
-            final_bo_approval = business_owner_approval
-            final_bo_note = bo_approval_note if bo_approval_note is not None else current_bo_note
-        else:
-            final_bo_approval = None  # Pass NULL so SP doesn't update this field
-            final_bo_note = None  # Pass NULL so SP doesn't update this field
-        
-        if rpa_approval is not None:
-            final_rpa_approval = rpa_approval
-            final_rpa_note = rpa_approval_note if rpa_approval_note is not None else current_rpa_note
-        else:
-            final_rpa_approval = None  # Pass NULL so SP doesn't update this field
-            final_rpa_note = None  # Pass NULL so SP doesn't update this field
-        
-        # Use stored procedure - it correctly handles NULL values
-        # The SP checks "IF @BusinessOwnerApproval IS NOT NULL" before updating
-        # So passing NULL means "don't update this field"
-        # CRITICAL: Ensure we're passing actual None (which becomes SQL NULL), not the current value
-        
-        # Build parameters - use None (SQL NULL) for fields we don't want to update
-        sp_params = (
-            a_id,
-            process_id,
-            final_bo_approval,  # None if not updating BO (becomes SQL NULL)
-            final_bo_note,  # None if not updating BO (becomes SQL NULL)
-            bo_approval_status if bo_approval_status is not None else None,
-            final_rpa_approval,  # None if not updating RPA (becomes SQL NULL)
-            final_rpa_note,  # None if not updating RPA (becomes SQL NULL)
-            rpa_approval_status if rpa_approval_status is not None else None,
-            user_id,
-        )
-        
-        
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.UpdateApprovalStage "
-            "@A_id = %s, @process_id = %s, "
-            "@BusinessOwnerApproval = %s, @BO_ApprovalNote = %s, @BO_approval_status = %s, "
-            "@RPA_Approval = %s, @RPA_ApprovalNote = %s, @RPA_approval_status = %s, "
-            "@LoggedInUserId = %s",
-            sp_params
-        )
-        result = cursor.fetchall()
-        
-        # Format result as dictionary
-        if result and cursor.description:
-            columns = [column[0] for column in cursor.description]
-            approval_dict = dict(zip(columns, result[0]))
-            # Convert datetime objects to ISO format strings for consistent timezone handling
-            approval_dict = format_datetime_for_json(approval_dict)
-            
-            # CRITICAL: Verify the stored procedure didn't incorrectly update both approvals
-            # If we only updated one, ensure the other one matches what we intended
-            bo_value_after = approval_dict.get('BusinessOwnerApproval')
-            rpa_value_after = approval_dict.get('RPA_Approval')
-            
-            
-            correction_needed = False
-            
-            # If we only updated BO, verify RPA wasn't changed
-            if business_owner_approval is not None and rpa_approval is None:
-                # Normalize boolean values for comparison
-                rpa_after_bool = bool(rpa_value_after) if rpa_value_after is not None else False
-                rpa_current_bool = bool(current_rpa_approval) if current_rpa_approval is not None else False
-                
-                if rpa_after_bool != rpa_current_bool:
-                    # Correct it back
-                    cursor.execute(
-                        f"UPDATE {DBSCHEMA}.ApprovalStage "
-                        "SET RPA_Approval = %s "
-                        "WHERE A_id = %s AND IsDeleted = 0",
-                        (current_rpa_approval, a_id)
-                    )
-                    approval_dict['RPA_Approval'] = current_rpa_approval
-                    rpa_value_after = current_rpa_approval
-                    correction_needed = True
-            
-            # If we only updated RPA, verify BO wasn't changed
-            if rpa_approval is not None and business_owner_approval is None:
-                # Normalize boolean values for comparison
-                bo_after_bool = bool(bo_value_after) if bo_value_after is not None else False
-                bo_current_bool = bool(current_bo_approval) if current_bo_approval is not None else False
-                
-                if bo_after_bool != bo_current_bool:
-                    # Correct it back
-                    cursor.execute(
-                        f"UPDATE {DBSCHEMA}.ApprovalStage "
-                        "SET BusinessOwnerApproval = %s "
-                        "WHERE A_id = %s AND IsDeleted = 0",
-                        (current_bo_approval, a_id)
-                    )
-                    approval_dict['BusinessOwnerApproval'] = current_bo_approval
-                    bo_value_after = current_bo_approval
-                    correction_needed = True
-            
-            # Check if both approvals are completed (similar to insert_approval_stage logic)
-            bo_approved = (bo_value_after == 1 or bo_value_after is True or bo_value_after == "1" or str(bo_value_after) == "1")
-            rpa_approved = (rpa_value_after == 1 or rpa_value_after is True or rpa_value_after == "1" or str(rpa_value_after) == "1")
-            both_completed = bo_approved and rpa_approved
-
-            # --- ADD THIS BLOCK ---
-            # Always reset downstream stages after Approval update
-            cursor.execute(
-                f"SELECT StageOrder FROM {DBSCHEMA}.StageMaster WHERE StageName = %s",
-                ("Approval",)
-            )
-            approval_order_row = cursor.fetchone()
-            if approval_order_row:
-                approval_order = approval_order_row[0]
-                cursor.execute(
-                    f"UPDATE {DBSCHEMA}.StageTracking SET Status = 'Pending' "
-                    f"WHERE process_id = %s AND StageOrder > %s",
-                    (process_id, approval_order)
-                )
-            # --- END BLOCK ---
-
-            # If both approvals are completed, move to the next stage using SubmitStageAndMoveNext
-            if both_completed:
-                try:
-                    cursor.execute(
-                        f"EXEC {DBSCHEMA}.SubmitStageAndMoveNext "
-                        "@ProcessId = %s, @CurrentStageName = %s, @LoggedInUserId = %s",
-                        (process_id, 'Approval', user_id)
-                    )
-                    move_result = cursor.fetchall()
-
-                    if move_result:
-                        # SP returns: FromStage, ToStage, Message
-                        # We don't have column names here, so map by position
-                        from_stage = move_result[0][0] if len(move_result[0]) > 0 else None
-                        to_stage = move_result[0][1] if len(move_result[0]) > 1 else None
-                        message = move_result[0][2] if len(move_result[0]) > 2 else "Stage moved successfully"
-                        stage_transition = {
-                            "fromStage": from_stage,
-                            "toStage": to_stage,
-                            "message": message,
-                        }
-                except Exception as move_error:
-                    # Log the error but don't fail the approval update
-                    # The approval was successfully recorded, stage transition can be handled separately
-                    error_msg = str(move_error)
-                    current_app.logger.warning(
-                        f"Stage transition failed for process {process_id} after both approvals completed: {error_msg}"
-                    )
-                    # Don't set stage_transition, approval update still succeeds
-
-            # Check if ApprovalNeedsReview flag is set (indicates previous stages were updated)
-            approval_needs_review = approval_dict.get('ApprovalNeedsReview')
-            needs_review = (approval_needs_review == 1 or approval_needs_review is True or 
-                          approval_needs_review == "1" or str(approval_needs_review) == "1")
-            
-            # CRITICAL: Preserve ApprovalNeedsReview = 1 if it was set before AND not both approvals are completed
-            # This ensures the flag remains true until both approvals are done, even if SP resets it
-            if prev_approval_needs_review == 1 and not both_completed:
-                # Restore ApprovalNeedsReview = 1 if it was set before and not both are completed
-                cursor.execute(
-                    f"UPDATE {DBSCHEMA}.ApprovalStage "
-                    "SET ApprovalNeedsReview = 1 "
-                    "WHERE A_id = %s AND IsDeleted = 0",
-                    (a_id,)
-                )
-                approval_dict['ApprovalNeedsReview'] = 1
-                needs_review = True
-
-            # Commit after all operations (including ApprovalNeedsReview restoration)
-            conn.commit()
-            
-            # Show notification only if ApprovalNeedsReview = 1
-            notification_message = None
-            if needs_review:
-                # Find which stage was updated to include in the notification
-                updated_stage_name = get_updated_stage_name(cursor, DBSCHEMA, process_id)
-                notification_message = get_approval_review_notification(updated_stage_name)
-            
-            response_data = {
-                "success": True,
-                "approval": approval_dict,
-                "bothApprovalsCompleted": both_completed,
-                "boStatus": "Approved" if bo_approved else "Pending",
-                "rpaStatus": "Approved" if rpa_approved else "Pending",
-                "stageTransition": stage_transition,
-            }
-            
-            # Only include message if ApprovalNeedsReview is set
-            if notification_message:
-                response_data["message"] = notification_message
-            
-            return jsonify(response_data), 200
-        else:
-            conn.commit()
-            return jsonify({"success": False, "message": "Failed to update approval stage"}), 500
-            
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"Error updating approval stage: {e}")
-        # Check if error is about record not found
-        error_message = str(e)
-        if "not found" in error_message.lower() or "does not exist" in error_message.lower():
-            return jsonify({"success": False, "message": "Approval stage not found"}), 404
-        return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-
-@process_registration_bp.route('/api/stage/submit-and-next', methods=['POST'])
-@token_required
-def submit_stage_and_move_next(user_id, user_name):
-    """
-    Generic endpoint for button-only stages to update StageTracking and move to next stage.
-    Uses santova.SubmitStageAndMoveNext stored procedure.
-
-    Expected JSON body:
-    {
-        "ProcessId": 123,
-        "CurrentStageName": "Development" | "UAT" | "Go-Live" | "Hypercare" | "Handover" | "Approval" | ...
-    }
-    """
-    conn = None
-    cursor = None
-
-    try:
-        DBSCHEMA = get_db_schema()
-        data = request.get_json()
-
-        process_id = data.get('ProcessId')
-        current_stage_name = data.get('CurrentStageName')
-
-        # Validate required fields
-        if process_id is None:
-            return jsonify({"success": False, "message": "ProcessId is required"}), 400
-        if not current_stage_name:
-            return jsonify({"success": False, "message": "CurrentStageName is required"}), 400
-
-        conn = connect_to_database()
-        cursor = conn.cursor()
-
-        # Execute stored procedure
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.SubmitStageAndMoveNext "
-            "@ProcessId = %s, @CurrentStageName = %s, @LoggedInUserId = %s",
-            (process_id, current_stage_name, user_id)
-        )
-
-        result = cursor.fetchall()
-        conn.commit()
-
-        # SP returns: FromStage, ToStage, Message
-        from_stage = None
-        to_stage = None
-        message = "Stage moved successfully"
-
-        if result and len(result[0]) > 0:
-            row = result[0]
-            if len(row) > 0:
-                from_stage = row[0]
-            if len(row) > 1:
-                to_stage = row[1]
-            if len(row) > 2 and row[2]:
-                message = row[2]
-
-        return jsonify({
-            "success": True,
-            "fromStage": from_stage,
-            "toStage": to_stage,
-            "message": message,
-        }), 200
-
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"Error submitting stage and moving next: {e}")
-        error_message = str(e)
-        # Bubble up SP validation errors (e.g., approvals not completed)
-        return jsonify({"success": False, "message": error_message}), 500
     finally:
         if cursor:
             cursor.close()

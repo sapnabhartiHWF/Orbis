@@ -1,15 +1,17 @@
 from flask import Blueprint, jsonify, request
 from .create_exception_ticket import create_exception_ticket, get_exception_ticket
 from app.auth_middleware import token_required
-from app.db_schema_utils import get_airline_schema
+from app.db_schema_utils import get_bot_schema
 
 exception_blueprint = Blueprint('exception', __name__)
 
 @exception_blueprint.route('/api/create-exception', methods=['POST'])
 @token_required
-def create_exception(user_id, user_name):
+def create_exception():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     try:
-        SCHEMA = get_airline_schema()
+        SCHEMA = get_bot_schema()
         data = request.get_json()
         if not data:
             return jsonify({'status': 'error', 'message': 'No data provided'}), 400
@@ -36,9 +38,11 @@ def create_exception(user_id, user_name):
 
 @exception_blueprint.route('/api/get-exception', methods=['GET'])
 @token_required
-def get_exception(user_id, user_name):
+def get_exception():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     try:
-        SCHEMA = get_airline_schema()
+        SCHEMA = get_bot_schema()
         exceptions = get_exception_ticket(SCHEMA)
         # Frontend expects 'data' not 'message'
         return jsonify({'status': 'success', 'data': exceptions}), 200

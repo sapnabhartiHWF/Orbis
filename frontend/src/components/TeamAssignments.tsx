@@ -73,10 +73,10 @@ interface TeamAssignmentsProps {
 
 // API URLs
 const INSERT_ASSIGNMENT_URL =
-  "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/insert-team-assignment";
-const GET_ASSIGNMENTS_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/get-team-assignments";
-const UPDATE_MILESTONE_STATUS_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/update-milestone-status";
-const GET_USERS_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/users";
+  "http://127.0.0.1:8000/api/insert-team-assignment";
+const GET_ASSIGNMENTS_URL = "http://127.0.0.1:8000/api/get-team-assignments";
+const UPDATE_MILESTONE_STATUS_URL = "http://127.0.0.1:8000/api/update-milestone-status";
+const GET_USERS_URL = "http://127.0.0.1:8000/api/users";
 
 const dummyNotifications: Notification[] = [
   {
@@ -192,10 +192,10 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
 
       // Build URL with statusFilter query parameter if provided
       let url = GET_ASSIGNMENTS_URL;
-      const apiStatusFilter = statusFilterParam 
+      const apiStatusFilter = statusFilterParam
         ? mapStatusFilterToAPI(statusFilterParam)
         : mapStatusFilterToAPI(statusFilter);
-      
+
       if (apiStatusFilter) {
         url += `?statusFilter=${encodeURIComponent(apiStatusFilter)}`;
       }
@@ -242,8 +242,8 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
             // Parse assigned users from comma-separated string
             const assignedToNames = apiAssignment.AssignedToNames
               ? apiAssignment.AssignedToNames.split(", ").filter(
-                  (name: string) => name.trim()
-                )
+                (name: string) => name.trim()
+              )
               : [];
 
             // Map milestones
@@ -304,7 +304,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
     // 1. "overdue" status (not supported by backend)
     // 2. Priority (not supported by backend)
     const matchesStatus =
-      statusFilter === "all" || 
+      statusFilter === "all" ||
       (statusFilter === "overdue" && assignment.status === "overdue") ||
       (statusFilter !== "overdue" && assignment.status === statusFilter);
     const matchesPriority =
@@ -1123,12 +1123,12 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
             ).length;
             // Use ProgressPercent from database (updated by triggers) if available,
             // otherwise calculate from completed milestones
-            const progressPercentage = 
+            const progressPercentage =
               (assignment as any).progressPercent !== undefined
                 ? (assignment as any).progressPercent
                 : assignment.milestones.length > 0
-                ? (completedMilestones / assignment.milestones.length) * 100
-                : 0;
+                  ? (completedMilestones / assignment.milestones.length) * 100
+                  : 0;
 
             const isExpanded = expandedAssignment === assignment.id;
 
@@ -1156,7 +1156,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                           {assignment.status === "in-progress"
                             ? "In Progress"
                             : assignment.status.charAt(0).toUpperCase() +
-                              assignment.status.slice(1)}
+                            assignment.status.slice(1)}
                         </Badge>
                       </div>
 
@@ -1334,7 +1334,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                             {Math.round(
                               (assignment.estimatedHours /
                                 assignment.actualHours) *
-                                100
+                              100
                             )}
                             %
                           </p>
@@ -1388,13 +1388,12 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                                 </div>
                               </div>
                               <div
-                                className={`w-2 h-2 rounded-full ${
-                                  memberData?.availability === "available"
-                                    ? "bg-success"
-                                    : memberData?.availability === "busy"
+                                className={`w-2 h-2 rounded-full ${memberData?.availability === "available"
+                                  ? "bg-success"
+                                  : memberData?.availability === "busy"
                                     ? "bg-warning"
                                     : "bg-muted"
-                                }`}
+                                  }`}
                               />
                             </div>
                           );
@@ -1479,11 +1478,10 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
 
                               <div className="flex-1">
                                 <h4
-                                  className={`font-medium ${
-                                    milestone.status === "completed"
-                                      ? "line-through text-muted-foreground"
-                                      : ""
-                                  }`}
+                                  className={`font-medium ${milestone.status === "completed"
+                                    ? "line-through text-muted-foreground"
+                                    : ""
+                                    }`}
                                 >
                                   {milestone.title}
                                 </h4>
@@ -1510,7 +1508,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                               {milestone.status === "in-progress"
                                 ? "In Progress"
                                 : milestone.status.charAt(0).toUpperCase() +
-                                  milestone.status.slice(1)}
+                                milestone.status.slice(1)}
                             </Badge>
                           </div>
                         ))}
@@ -1564,7 +1562,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                           {milestone.status === "in-progress"
                             ? "In Progress"
                             : milestone.status.charAt(0).toUpperCase() +
-                              milestone.status.slice(1)}
+                            milestone.status.slice(1)}
                         </Badge>
                       </div>
                       <div>
@@ -1635,8 +1633,8 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                             {milestone.status === "completed"
                               ? "100%"
                               : milestone.status === "in-progress"
-                              ? "In Progress"
-                              : "0%"}
+                                ? "In Progress"
+                                : "0%"}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -1648,12 +1646,12 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                               (assignment as any).progressPercent !== undefined
                                 ? (assignment as any).progressPercent
                                 : assignment.milestones.length > 0
-                                ? (assignment.milestones.filter(
+                                  ? (assignment.milestones.filter(
                                     (m) => m.status === "completed"
                                   ).length /
                                     assignment.milestones.length) *
                                   100
-                                : 0
+                                  : 0
                             )}
                             %
                           </span>

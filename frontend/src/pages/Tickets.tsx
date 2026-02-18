@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react"
-import { 
-  Ticket, 
-  Search, 
-  Filter, 
-  Plus, 
-  MessageSquare, 
-  Paperclip, 
+import { useNavigate } from "react-router-dom"
+import {
+  Ticket,
+  Search,
+  Filter,
+  Plus,
+  MessageSquare,
+  Paperclip,
   Send,
   Users,
   Clock,
@@ -52,15 +53,16 @@ import { getExceptionSummary } from "@/utils/ticketExceptionIntegration"
 import { Loader } from "lucide-react"
 
 // API URLs
-const API_BASE_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const GET_TICKETS_URL = `${API_BASE_URL}/api/get_tickets`
 const ADD_TICKET_URL = `${API_BASE_URL}/api/add_ticket`
 const UPDATE_TICKET_URL = `${API_BASE_URL}/api/update_ticket`
 const DELETE_TICKET_URL = `${API_BASE_URL}/api/delete_ticket`
 const DOWNLOAD_ATTACHMENT_URL = `${API_BASE_URL}/api/download_ticket_attachment`
-const GET_USERS_URL = `${API_BASE_URL}/api/users`
+// const GET_USERS_URL = `${API_BASE_URL}/api/users`
 const ADD_TICKET_CHAT_URL = `${API_BASE_URL}/api/add_ticket_chat`
 const GET_TICKET_CHAT_URL = `${API_BASE_URL}/api/get_ticket_chat`
+const GET_EMAILS_URL = `${API_BASE_URL}/api/emails`
 
 // Ticket interface matching API response
 interface TicketData {
@@ -105,7 +107,7 @@ interface Ticket {
   reporter: string
   created: string
   updated: string
-  slaDeadline?: string
+  // slaDeadline?: string
   description: string
   linkedRules: string[]
   linkedExceptions: string[]
@@ -154,20 +156,20 @@ const mapTicketToFrontend = (apiTicket: TicketData): Ticket => {
   const assignedUsers = apiTicket.AssignedUsers && Array.isArray(apiTicket.AssignedUsers) && apiTicket.AssignedUsers.length > 0
     ? apiTicket.AssignedUsers
     : []
-  
+
   const assignedUser = assignedUsers.length > 0 ? assignedUsers[0] : null
-  
-  const assigneeName = assignedUser 
+
+  const assigneeName = assignedUser
     ? `${assignedUser.FirstName} ${assignedUser.LastName}`.trim()
     : "Unassigned"
-  
+
   const assigneeAvatar = assignedUser
     ? `${(assignedUser.FirstName || "")[0] || ""}${(assignedUser.LastName || "")[0] || ""}`.toUpperCase()
     : "NA"
 
   // Get assigned user names (comma-separated) or from the array
-  const assignedUserNames = apiTicket.AssignedUserNames || 
-    (assignedUsers.length > 0 
+  const assignedUserNames = apiTicket.AssignedUserNames ||
+    (assignedUsers.length > 0
       ? assignedUsers.map(u => `${u.FirstName || ""} ${u.LastName || ""}`.trim()).filter(Boolean).join(", ")
       : "")
 
@@ -200,11 +202,11 @@ const mapTicketToFrontend = (apiTicket: TicketData): Ticket => {
 const getOriginalFileName = (filePath: string): string => {
   // Extract filename from path
   const fileName = filePath.split(/[/\\]/).pop() || filePath
-  
+
   // Remove timestamp prefix pattern: YYYYMMDDHHMMSS_ (14 digits followed by underscore)
   const timestampPattern = /^\d{14}_/
   const originalName = fileName.replace(timestampPattern, '')
-  
+
   return originalName || fileName
 }
 
@@ -228,10 +230,8 @@ const truncateFileName = (fileName: string, maxLength: number = 40): string => {
   return nameWithoutExt.substring(0, maxNameLength) + '...' + extension
 }
 
-// Mock team members for chat
-const teamMembers = []
-
 export default function Tickets() {
+  const navigate = useNavigate()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -254,7 +254,12 @@ export default function Tickets() {
   const [isLoadingChat, setIsLoadingChat] = useState(false)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [sendToUserId, setSendToUserId] = useState<number | null>(null)
-  
+
+  // Team Chat (email conversation) state
+  const [emailConversations, setEmailConversations] = useState<any[]>([])
+  const [selectedEmailConversation, setSelectedEmailConversation] = useState<any | null>(null)
+  const [isLoadingEmails, setIsLoadingEmails] = useState(false)
+
   // Form state
   const [formTitle, setFormTitle] = useState("")
   const [formDescription, setFormDescription] = useState("")
@@ -265,52 +270,60 @@ export default function Tickets() {
   const [keepExistingAttachment, setKeepExistingAttachment] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const editFileInputRef = useRef<HTMLInputElement>(null)
-  
+
   const { toast } = useToast()
 
   // Fetch tickets and users on mount
   useEffect(() => {
     fetchTickets()
-    fetchUsers()
+    // fetchUsers()
   }, [])
 
-  const 
-  fetchUsers = async () => {
-    setIsLoadingUsers(true)
-    try {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        setIsLoadingUsers(false)
-        return
-      }
-
-      const response = await fetch(GET_USERS_URL, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch users")
-      }
-
-      const data = await response.json()
-      if (data.success && data.data) {
-        setUsers(data.data)
-      }
-    } catch (error: any) {
-      console.error("Error fetching users:", error)
-      toast({
-        title: "Error fetching users",
-        description: "Failed to load user list",
-        variant: "destructive"
-      })
-    } finally {
-      setIsLoadingUsers(false)
+  // Fetch email conversations when Team Chat panel is opened
+  useEffect(() => {
+    if (showChatPanel) {
+      fetchEmailConversations()
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showChatPanel])
+
+  // const
+  //   fetchUsers = async () => {
+  //     setIsLoadingUsers(true)
+  //     try {
+  //       const token = localStorage.getItem("token")
+  //       if (!token) {
+  //         setIsLoadingUsers(false)
+  //         return
+  //       }
+
+  //       const response = await fetch(GET_USERS_URL, {
+  //         method: "GET",
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //           Authorization: `Bearer ${token}`,
+  //         },
+  //       })
+
+  //       if (!response.ok) {
+  //         throw new Error("Failed to fetch users")
+  //       }
+
+  //       const data = await response.json()
+  //       if (data.success && data.data) {
+  //         setUsers(data.data)
+  //       }
+  //     } catch (error: any) {
+  //       console.error("Error fetching users:", error)
+  //       toast({
+  //         title: "Error fetching users",
+  //         description: "Failed to load user list",
+  //         variant: "destructive"
+  //       })
+  //     } finally {
+  //       setIsLoadingUsers(false)
+  //     }
+  //   }
 
   const handleUserToggle = (userId: number) => {
     const userIdStr = userId.toString()
@@ -355,16 +368,27 @@ export default function Tickets() {
         },
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch tickets")
+      const contentType = response.headers.get("content-type")
+      let data: any = null
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json()
+      } else {
+        const text = await response.text()
+        throw new Error(
+          `Server returned ${response.status}: ${response.statusText}. ${text.substring(0, 150)}`
+        )
       }
 
-      const data = await response.json()
-      
-      if (data.success && data.tickets) {
+      if (!response.ok || !data.success) {
+        const backendMessage = data?.message || "Failed to fetch tickets"
+        throw new Error(backendMessage)
+      }
+
+      if (data.tickets) {
         const mappedTickets = data.tickets.map(mapTicketToFrontend)
         setTickets(mappedTickets)
-        
+
         // Select first ticket if available
         if (mappedTickets.length > 0 && !selectedTicket) {
           setSelectedTicket(mappedTickets[0])
@@ -385,9 +409,43 @@ export default function Tickets() {
     }
   }
 
+  const fetchEmailConversations = async () => {
+    setIsLoadingEmails(true)
+    try {
+      const response = await fetch(GET_EMAILS_URL, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch email conversations")
+      }
+
+      const data = await response.json()
+      const emails = Array.isArray(data) ? data : []
+      setEmailConversations(emails)
+
+      if (emails.length > 0 && !selectedEmailConversation) {
+        setSelectedEmailConversation(emails[0])
+      }
+    } catch (error: any) {
+      console.error("Error fetching email conversations:", error)
+      toast({
+        title: "Error loading Team Chat",
+        description: error.message || "Failed to load email conversations",
+        variant: "destructive",
+      })
+      setEmailConversations([])
+    } finally {
+      setIsLoadingEmails(false)
+    }
+  }
+
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         ticket.description.toLowerCase().includes(searchQuery.toLowerCase())
+      ticket.description.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesType = filterType === "all" || ticket.type === filterType
     const matchesStatus = filterStatus === "all" || ticket.status === filterStatus
     const matchesPriority = filterPriority === "all" || ticket.priority === filterPriority
@@ -417,7 +475,7 @@ export default function Tickets() {
     switch (type) {
       case 'Error': return <AlertTriangle className="w-4 h-4" />
       case 'Feedback': return <MessageSquare className="w-4 h-4" />
-      case 'New Process': return <Lightbulb className="w-4 h-4" />
+      // case 'New Process': return <Lightbulb className="w-4 h-4" />
       default: return <FileText className="w-4 h-4" />
     }
   }
@@ -548,7 +606,7 @@ export default function Tickets() {
 
       toast({
         title: "Message sent",
-        description: sendToUserId 
+        description: sendToUserId
           ? `Your message has been sent to ${users.find(u => u.UserId === sendToUserId)?.FirstName || 'user'}.`
           : "Your message has been added to the ticket thread."
       })
@@ -560,12 +618,12 @@ export default function Tickets() {
     } catch (error: any) {
       // Only log to console, don't show technical errors to user
       console.error("Error sending message:", error)
-      
+
       // Show user-friendly error message
       const userFriendlyMessage = error.message && !error.message.includes("NULL") && !error.message.includes("column")
         ? error.message
         : "Unable to send message. Please try again."
-      
+
       toast({
         title: "Failed to send message",
         description: userFriendlyMessage,
@@ -628,13 +686,13 @@ export default function Tickets() {
       if (formPriority) {
         formData.append("Priority", formPriority)
       }
-      
+
       // Convert user ID strings to integers for JSON array
       if (formAssignedUserIds.length > 0) {
         const userIdsInt = formAssignedUserIds.map(id => parseInt(id)).filter(id => !isNaN(id))
         formData.append("AssignedUserIds", JSON.stringify(userIdsInt))
       }
-      
+
       if (formAttachment) {
         formData.append("Attachment", formAttachment)
       }
@@ -757,11 +815,11 @@ export default function Tickets() {
 
   const handleEditTicket = () => {
     if (!selectedTicket) return
-    
+
     // Extract Tid from ticket id (format: "TKT-001")
     const tidMatch = selectedTicket.id.match(/TKT-(\d+)/)
     if (!tidMatch) return
-    
+
     // Populate form with existing ticket data
     setFormTitle(selectedTicket.title)
     setFormDescription(selectedTicket.description)
@@ -824,7 +882,7 @@ export default function Tickets() {
         formData.append("Priority", formPriority)
       }
       formData.append("KeepExistingAttachment", keepExistingAttachment.toString())
-      
+
       // Convert user ID strings to integers for JSON array
       if (formAssignedUserIds.length > 0) {
         const userIdsInt = formAssignedUserIds.map(id => parseInt(id)).filter(id => !isNaN(id))
@@ -832,7 +890,7 @@ export default function Tickets() {
       } else {
         formData.append("AssignedUserIds", "[]")
       }
-      
+
       if (formAttachment) {
         formData.append("Attachment", formAttachment)
       }
@@ -902,10 +960,10 @@ export default function Tickets() {
             <p className="text-muted-foreground">Integrated support and team communication</p>
           </div>
           <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="gap-2"
-              onClick={() => setShowChatPanel(!showChatPanel)}
+              onClick={() => navigate("/team-chat")}
             >
               <MessageSquare className="w-4 h-4" />
               Team Chat
@@ -932,7 +990,7 @@ export default function Tickets() {
                         <SelectContent>
                           <SelectItem value="Error">Error</SelectItem>
                           <SelectItem value="Feedback">Feedback</SelectItem>
-                          <SelectItem value="New Process">New Process</SelectItem>
+                          {/* <SelectItem value="New Process">New Process</SelectItem> */}
                         </SelectContent>
                       </Select>
                     </div>
@@ -950,40 +1008,39 @@ export default function Tickets() {
                       </Select>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="title">Title <span className="text-red-500">*</span></Label>
-                    <Input 
-                      id="title" 
-                      placeholder="Brief description of the issue or request" 
+                    <Input
+                      id="title"
+                      placeholder="Brief description of the issue or request"
                       value={formTitle}
                       onChange={(e) => setFormTitle(e.target.value)}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
-                    <Textarea 
-                      id="description" 
+                    <Textarea
+                      id="description"
                       placeholder="Detailed description..."
                       className="min-h-[100px] border border-gray-200 rounded-md p-2"
                       value={formDescription}
                       onChange={(e) => setFormDescription(e.target.value)}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Assign To <span className="text-red-500">*</span></Label>
                     <Popover open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
-                          className={`w-full justify-start text-left font-normal ${
-                            formAssignedUserIds.length === 0 ? 'border-destructive' : ''
-                          }`}
+                          className={`w-full justify-start text-left font-normal ${formAssignedUserIds.length === 0 ? 'border-destructive' : ''
+                            }`}
                         >
                           <Users className="w-4 h-4 mr-2" />
-                          {formAssignedUserIds.length > 0 
+                          {formAssignedUserIds.length > 0
                             ? `${formAssignedUserIds.length} user${formAssignedUserIds.length > 1 ? 's' : ''} selected`
                             : "Select users to assign"}
                         </Button>
@@ -1004,14 +1061,14 @@ export default function Tickets() {
                               <div className="space-y-1">
                                 {users.map((user) => {
                                   if (!user || !user.UserId) return null
-                                  
+
                                   const userIdStr = user.UserId.toString()
                                   const isSelected = formAssignedUserIds.includes(userIdStr)
                                   const firstName = user.FirstName || ""
                                   const lastName = user.LastName || ""
                                   const userName = `${firstName} ${lastName}`.trim() || "Unknown User"
                                   const avatarInitials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "U"
-                                  
+
                                   return (
                                     <div
                                       key={user.UserId}
@@ -1069,17 +1126,17 @@ export default function Tickets() {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Attachments</Label>
-                    <div 
+                    <div
                       className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
                       <p className="text-sm text-muted-foreground">
-                        {formAttachment 
-                          ? formAttachment.name 
+                        {formAttachment
+                          ? formAttachment.name
                           : "Drop files here or click to browse"}
                       </p>
                       <input
@@ -1094,10 +1151,10 @@ export default function Tickets() {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="flex justify-end gap-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setShowCreateDialog(false)
                         setFormTitle("")
@@ -1114,8 +1171,8 @@ export default function Tickets() {
                     >
                       Cancel
                     </Button>
-                    <Button 
-                      onClick={handleCreateTicket} 
+                    <Button
+                      onClick={handleCreateTicket}
                       className="bg-gradient-primary"
                       disabled={isCreating || !formTitle.trim() || formAssignedUserIds.length === 0}
                     >
@@ -1125,7 +1182,7 @@ export default function Tickets() {
                 </div>
               </DialogContent>
             </Dialog>
-            
+
             {/* Edit Ticket Dialog */}
             <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
               <DialogContent className="max-w-2xl">
@@ -1143,7 +1200,7 @@ export default function Tickets() {
                         <SelectContent>
                           <SelectItem value="Error">Error</SelectItem>
                           <SelectItem value="Feedback">Feedback</SelectItem>
-                          <SelectItem value="New Process">New Process</SelectItem>
+                          {/* <SelectItem value="New Process">New Process</SelectItem> */}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1161,40 +1218,39 @@ export default function Tickets() {
                       </Select>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="edit-title">Title <span className="text-red-500">*</span></Label>
-                    <Input 
-                      id="edit-title" 
-                      placeholder="Brief description of the issue or request" 
+                    <Input
+                      id="edit-title"
+                      placeholder="Brief description of the issue or request"
                       value={formTitle}
                       onChange={(e) => setFormTitle(e.target.value)}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="edit-description">Description</Label>
-                    <Textarea 
-                      id="edit-description" 
+                    <Textarea
+                      id="edit-description"
                       placeholder="Detailed description..."
                       className="min-h-[100px] border border-gray-200 rounded-md p-2"
                       value={formDescription}
                       onChange={(e) => setFormDescription(e.target.value)}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Assign To <span className="text-red-500">*</span></Label>
                     <Popover open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
-                          className={`w-full justify-start text-left font-normal ${
-                            formAssignedUserIds.length === 0 ? 'border-destructive' : ''
-                          }`}
+                          className={`w-full justify-start text-left font-normal ${formAssignedUserIds.length === 0 ? 'border-destructive' : ''
+                            }`}
                         >
                           <Users className="w-4 h-4 mr-2" />
-                          {formAssignedUserIds.length > 0 
+                          {formAssignedUserIds.length > 0
                             ? `${formAssignedUserIds.length} user${formAssignedUserIds.length > 1 ? 's' : ''} selected`
                             : "Select users to assign"}
                         </Button>
@@ -1215,14 +1271,14 @@ export default function Tickets() {
                               <div className="space-y-1">
                                 {users.map((user) => {
                                   if (!user || !user.UserId) return null
-                                  
+
                                   const userIdStr = user.UserId.toString()
                                   const isSelected = formAssignedUserIds.includes(userIdStr)
                                   const firstName = user.FirstName || ""
                                   const lastName = user.LastName || ""
                                   const userName = `${firstName} ${lastName}`.trim() || "Unknown User"
                                   const avatarInitials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "U"
-                                  
+
                                   return (
                                     <div
                                       key={user.UserId}
@@ -1280,7 +1336,7 @@ export default function Tickets() {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Attachments</Label>
                     {selectedTicket && selectedTicket.attachments.length > 0 && (
@@ -1295,14 +1351,14 @@ export default function Tickets() {
                         </Label>
                       </div>
                     )}
-                    <div 
+                    <div
                       className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => editFileInputRef.current?.click()}
                     >
                       <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
                       <p className="text-sm text-muted-foreground">
-                        {formAttachment 
-                          ? formAttachment.name 
+                        {formAttachment
+                          ? formAttachment.name
                           : "Drop files here or click to browse (optional)"}
                       </p>
                       <input
@@ -1318,10 +1374,10 @@ export default function Tickets() {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="flex justify-end gap-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setShowEditDialog(false)
                         setFormTitle("")
@@ -1339,8 +1395,8 @@ export default function Tickets() {
                     >
                       Cancel
                     </Button>
-                    <Button 
-                      onClick={handleUpdateTicket} 
+                    <Button
+                      onClick={handleUpdateTicket}
                       className="bg-gradient-primary"
                       disabled={isUpdating || !formTitle.trim() || formAssignedUserIds.length === 0}
                     >
@@ -1354,7 +1410,7 @@ export default function Tickets() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -1367,7 +1423,7 @@ export default function Tickets() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -1380,21 +1436,21 @@ export default function Tickets() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Avg Resolution</p>
-                  <p className="text-2xl font-bold text-success">0m</p>
-                  <p className="text-xs text-success">0m improvement</p>
+                  <p className="text-sm text-muted-foreground">Resolved Tickets</p>
+                  <p className="text-2xl font-bold text-success">{tickets.filter(t => t.status === "resolved").length}</p>
+                  <p className="text-xs text-success">{tickets.filter(t => t.status === "resolved").length} this week</p>
                 </div>
                 <Clock className="w-8 h-8 text-success" />
               </div>
             </CardContent>
           </Card>
-          
-          <Card className="bg-gradient-card shadow-card">
+
+          {/* <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1405,7 +1461,7 @@ export default function Tickets() {
                 <Users className="w-8 h-8 text-primary" />
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1416,7 +1472,7 @@ export default function Tickets() {
                 <Ticket className="w-5 h-5" />
                 Support Tickets
               </CardTitle>
-              
+
               {/* Filters */}
               <div className="flex gap-2 mt-4">
                 <div className="relative flex-1">
@@ -1428,7 +1484,7 @@ export default function Tickets() {
                     className="pl-10"
                   />
                 </div>
-                
+
                 <Select value={filterType} onValueChange={setFilterType}>
                   <SelectTrigger className="w-32">
                     <SelectValue placeholder="Type" />
@@ -1437,10 +1493,10 @@ export default function Tickets() {
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="Error">Error</SelectItem>
                     <SelectItem value="Feedback">Feedback</SelectItem>
-                    <SelectItem value="New Process">New Process</SelectItem>
+                    {/* <SelectItem value="New Process">New Process</SelectItem> */}
                   </SelectContent>
                 </Select>
-                
+
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-32">
                     <SelectValue placeholder="Status" />
@@ -1454,7 +1510,7 @@ export default function Tickets() {
                 </Select>
               </div>
             </CardHeader>
-            
+
             <CardContent>
               <ScrollArea className="h-[600px]">
                 {isLoading ? (
@@ -1465,85 +1521,84 @@ export default function Tickets() {
                   <div className="flex flex-col items-center justify-center h-[400px] text-center">
                     <Ticket className="w-12 h-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">
-                      {tickets.length === 0 
+                      {tickets.length === 0
                         ? "No tickets found. Create your first ticket to get started."
                         : "No tickets match your filters."}
                     </p>
                   </div>
                 ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Ticket</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Priority</TableHead>
-                      {/* <TableHead>Status</TableHead> */}
-                      <TableHead>Assignee</TableHead>
-                      <TableHead>SLA</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTickets.map((ticket) => (
-                      <TableRow 
-                        key={ticket.id}
-                        className={`cursor-pointer transition-colors ${
-                          selectedTicket?.id === ticket.id 
-                            ? 'bg-primary/5 border-l-4 border-l-primary' 
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Ticket</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Priority</TableHead>
+                        {/* <TableHead>Status</TableHead> */}
+                        <TableHead>Assignee</TableHead>
+                        {/* <TableHead>SLA</TableHead> */}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTickets.map((ticket) => (
+                        <TableRow
+                          key={ticket.id}
+                          className={`cursor-pointer transition-colors ${selectedTicket?.id === ticket.id
+                            ? 'bg-primary/5 border-l-4 border-l-primary'
                             : 'hover:bg-muted/50'
-                        }`}
-                        onClick={() => setSelectedTicket(ticket)}
-                      >
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="font-medium text-sm">{ticket.id}</div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-                              {ticket.title}
+                            }`}
+                          onClick={() => setSelectedTicket(ticket)}
+                        >
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="font-medium text-sm">{ticket.id}</div>
+                              <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                {ticket.title}
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getTypeIcon(ticket.type)}
-                            <span className="text-sm">{ticket.type}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getPriorityColor(ticket.priority)}>
-                            <div className="flex items-center gap-1">
-                              {getPriorityIcon(ticket.priority)}
-                              {ticket.priority}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getTypeIcon(ticket.type)}
+                              <span className="text-sm">{ticket.type}</span>
                             </div>
-                          </Badge>
-                        </TableCell>
-                        {/* <TableCell>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getPriorityColor(ticket.priority)}>
+                              <div className="flex items-center gap-1">
+                                {getPriorityIcon(ticket.priority)}
+                                {ticket.priority}
+                              </div>
+                            </Badge>
+                          </TableCell>
+                          {/* <TableCell>
                           <Badge className={getStatusColor(ticket.status)}>
                             {ticket.status.replace('-', ' ')}
                           </Badge>
                         </TableCell> */}
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="w-6 h-6">
-                              <AvatarFallback className="text-xs">{ticket.assigneeAvatar}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col">
-                              <span className="text-sm">{ticket.assignedUsers.length > 0 ? `${ticket.assignedUsers.length} member${ticket.assignedUsers.length > 1 ? 's' : ''}` : "Unassigned"}</span>
-                              {ticket.assignedUsers.length > 0 && (
-                                <span className="text-xs text-muted-foreground truncate max-w-[150px]">
-                                  {ticket.assignedUserNames || ticket.assignee}
-                                </span>
-                              )}
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="w-6 h-6">
+                                <AvatarFallback className="text-xs">{ticket.assigneeAvatar}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col">
+                                <span className="text-sm">{ticket.assignedUsers.length > 0 ? `${ticket.assignedUsers.length} member${ticket.assignedUsers.length > 1 ? 's' : ''}` : "Unassigned"}</span>
+                                {ticket.assignedUsers.length > 0 && (
+                                  <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                                    {ticket.assignedUserNames || ticket.assignee}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {ticket.slaDeadline 
-                            ? new Date(ticket.slaDeadline).toLocaleDateString()
-                            : "N/A"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          </TableCell>
+                          {/* <TableCell className="text-xs text-muted-foreground">
+                            {ticket.slaDeadline
+                              ? new Date(ticket.slaDeadline).toLocaleDateString()
+                              : "N/A"}
+                          </TableCell> */}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
               </ScrollArea>
             </CardContent>
@@ -1559,9 +1614,9 @@ export default function Tickets() {
                 </CardTitle>
                 {selectedTicket && (
                   <div className="flex items-center gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={handleEditTicket}
                     >
                       <Edit className="w-4 h-4" />
@@ -1595,7 +1650,7 @@ export default function Tickets() {
                 )}
               </div>
             </CardHeader>
-            
+
             <CardContent>
               <Tabs defaultValue="details" className="space-y-4">
                 <TabsList className="grid w-full grid-cols-3">
@@ -1603,433 +1658,433 @@ export default function Tickets() {
                   <TabsTrigger value="messages">Messages</TabsTrigger>
                   <TabsTrigger value="attachments">Files</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="details" className="space-y-4">
                   {selectedTicket ? (
-                  <div className="space-y-3">
-                    <div>
-                      <h3 className="font-semibold text-lg">{selectedTicket.title}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {selectedTicket.description}
-                      </p>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge className={getPriorityColor(selectedTicket.priority)}>
-                        <div className="flex items-center gap-1">
-                          {getPriorityIcon(selectedTicket.priority)}
-                          {selectedTicket.priority}
-                        </div>
-                      </Badge>
-                      {/* <Badge className={getStatusColor(selectedTicket.status)}>
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-lg">{selectedTicket.title}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {selectedTicket.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Badge className={getPriorityColor(selectedTicket.priority)}>
+                          <div className="flex items-center gap-1">
+                            {getPriorityIcon(selectedTicket.priority)}
+                            {selectedTicket.priority}
+                          </div>
+                        </Badge>
+                        {/* <Badge className={getStatusColor(selectedTicket.status)}>
                         {selectedTicket.status.replace('-', ' ')}
                       </Badge> */}
-                      <Badge variant="outline">
-                        <div className="flex items-center gap-1">
-                          {getTypeIcon(selectedTicket.type)}
-                          {selectedTicket.type}
-                        </div>
-                      </Badge>
-                    </div>
-                    
-                    <Separator />
-                    
-                    <div className="space-y-2">
+                        <Badge variant="outline">
+                          <div className="flex items-center gap-1">
+                            {getTypeIcon(selectedTicket.type)}
+                            {selectedTicket.type}
+                          </div>
+                        </Badge>
+                      </div>
+
+                      <Separator />
+
                       <div className="space-y-2">
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Assignee{selectedTicket.assignedUsers.length > 1 ? 's' : ''}:
-                        </span>
-                        {selectedTicket.assignedUsers.length > 0 ? (
-                          <div className="space-y-2">
-                            {selectedTicket.assignedUsers.map((user, index) => {
-                              const firstName = user.FirstName || ""
-                              const lastName = user.LastName || ""
-                              const userName = `${firstName} ${lastName}`.trim() || "Unknown User"
-                              const avatarInitials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "U"
-                              
-                              return (
-                                <div 
-                                  key={user.UserId || index} 
-                                  className="flex items-center gap-3 p-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors"
-                                >
-                                  <Avatar className="w-8 h-8">
-                                    <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
-                                      {avatarInitials}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1">
-                                    <div className="text-sm font-medium">{userName}</div>
-                                    {user.Email && (
-                                      <div className="text-xs text-muted-foreground">{user.Email}</div>
-                                    )}
+                        <div className="space-y-2">
+                          <span className="text-sm font-medium text-muted-foreground">
+                            Assignee{selectedTicket.assignedUsers.length > 1 ? 's' : ''}:
+                          </span>
+                          {selectedTicket.assignedUsers.length > 0 ? (
+                            <div className="space-y-2">
+                              {selectedTicket.assignedUsers.map((user, index) => {
+                                const firstName = user.FirstName || ""
+                                const lastName = user.LastName || ""
+                                const userName = `${firstName} ${lastName}`.trim() || "Unknown User"
+                                const avatarInitials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "U"
+
+                                return (
+                                  <div
+                                    key={user.UserId || index}
+                                    className="flex items-center gap-3 p-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors"
+                                  >
+                                    <Avatar className="w-8 h-8">
+                                      <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
+                                        {avatarInitials}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex-1">
+                                      <div className="text-sm font-medium">{userName}</div>
+                                      {user.Email && (
+                                        <div className="text-xs text-muted-foreground">{user.Email}</div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-3 p-2 rounded-md bg-muted/30">
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback className="text-xs bg-muted text-muted-foreground">NA</AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm text-muted-foreground">Unassigned</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Reporter:</span>
-                        <span>{selectedTicket.reporter}</span>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Created:</span>
-                        <span>{new Date(selectedTicket.created).toLocaleString()}</span>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">SLA Deadline:</span>
-                        <span className="text-warning">
-                          {selectedTicket.slaDeadline 
-                            ? new Date(selectedTicket.slaDeadline).toLocaleString()
-                            : "N/A"}
-                        </span>
-                      </div>
-                      
-                      {/* <div className="flex justify-between text-sm">
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 p-2 rounded-md bg-muted/30">
+                              <Avatar className="w-8 h-8">
+                                <AvatarFallback className="text-xs bg-muted text-muted-foreground">NA</AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm text-muted-foreground">Unassigned</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Reporter:</span>
+                          <span>{selectedTicket.reporter}</span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Created:</span>
+                          <span>{new Date(selectedTicket.created).toLocaleString()}</span>
+                        </div>
+
+                        {/* <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">SLA Deadline:</span>
+                          <span className="text-warning">
+                            {selectedTicket.slaDeadline
+                              ? new Date(selectedTicket.slaDeadline).toLocaleString()
+                              : "N/A"}
+                          </span>
+                        </div> */}
+
+                        {/* <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Estimated Hours:</span>
                         <span>{selectedTicket.estimatedHours}h</span>
                       </div> */}
-                    </div>
-                    
-                    {selectedTicket.linkedRules && selectedTicket.linkedRules.length > 0 && (
-                      <>
-                        <Separator />
+                      </div>
+
+                      {selectedTicket.linkedRules && selectedTicket.linkedRules.length > 0 && (
+                        <>
+                          <Separator />
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-sm">Linked Rules</h4>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedTicket.linkedRules.map(rule => (
+                                <Badge key={rule} variant="outline" className="text-xs">
+                                  <Link className="w-3 h-3 mr-1" />
+                                  {rule}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {selectedTicket.linkedExceptions && selectedTicket.linkedExceptions.length > 0 && (
+                        <>
+                          <Separator />
+                          <div className="space-y-3">
+                            <h4 className="font-semibold text-sm">Linked Exceptions</h4>
+                            {selectedTicket.linkedExceptions.map(exceptionId => {
+                              const exceptionDetails = getExceptionSummary(exceptionId)
+                              return exceptionDetails ? (
+                                <div key={exceptionId} className="border rounded-md p-3 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-mono text-sm">{exceptionDetails.id}</span>
+                                    <Badge className={
+                                      exceptionDetails.severity === 'high' ? 'text-destructive bg-destructive/10 border-destructive/20' :
+                                        exceptionDetails.severity === 'medium' ? 'text-warning bg-warning/10 border-warning/20' :
+                                          'text-success bg-success/10 border-success/20'
+                                    }>
+                                      {exceptionDetails.severity}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    <div><strong>Type:</strong> {exceptionDetails.type}</div>
+                                    <div><strong>Process:</strong> {exceptionDetails.process}</div>
+                                    {/* <div><strong>Status:</strong> {exceptionDetails.status}</div> */}
+                                  </div>
+                                </div>
+                              ) : (
+                                <Badge key={exceptionId} variant="outline" className="text-xs">
+                                  <AlertTriangle className="w-3 h-3 mr-1" />
+                                  {exceptionId}
+                                </Badge>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+
+                      <Separator />
+
+                      {selectedTicket.tags && selectedTicket.tags.length > 0 && (
                         <div className="space-y-2">
-                          <h4 className="font-semibold text-sm">Linked Rules</h4>
+                          <h4 className="font-semibold text-sm">Tags</h4>
                           <div className="flex flex-wrap gap-1">
-                            {selectedTicket.linkedRules.map(rule => (
-                              <Badge key={rule} variant="outline" className="text-xs">
-                                <Link className="w-3 h-3 mr-1" />
-                                {rule}
+                            {selectedTicket.tags.map(tag => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
                               </Badge>
                             ))}
                           </div>
                         </div>
-                      </>
-                    )}
-                    
-                    {selectedTicket.linkedExceptions && selectedTicket.linkedExceptions.length > 0 && (
-                      <>
-                        <Separator />
-                        <div className="space-y-3">
-                          <h4 className="font-semibold text-sm">Linked Exceptions</h4>
-                          {selectedTicket.linkedExceptions.map(exceptionId => {
-                            const exceptionDetails = getExceptionSummary(exceptionId)
-                            return exceptionDetails ? (
-                              <div key={exceptionId} className="border rounded-md p-3 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-mono text-sm">{exceptionDetails.id}</span>
-                                  <Badge className={
-                                    exceptionDetails.severity === 'high' ? 'text-destructive bg-destructive/10 border-destructive/20' :
-                                    exceptionDetails.severity === 'medium' ? 'text-warning bg-warning/10 border-warning/20' :
-                                    'text-success bg-success/10 border-success/20'
-                                  }>
-                                    {exceptionDetails.severity}
-                                  </Badge>
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  <div><strong>Type:</strong> {exceptionDetails.type}</div>
-                                  <div><strong>Process:</strong> {exceptionDetails.process}</div>
-                                  {/* <div><strong>Status:</strong> {exceptionDetails.status}</div> */}
-                                </div>
-                              </div>
-                            ) : (
-                              <Badge key={exceptionId} variant="outline" className="text-xs">
-                                <AlertTriangle className="w-3 h-3 mr-1" />
-                                {exceptionId}
-                              </Badge>
-                            )
-                          })}
-                        </div>
-                      </>
-                    )}
-                    
-                    <Separator />
-                    
-                    {selectedTicket.tags && selectedTicket.tags.length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="font-semibold text-sm">Tags</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedTicket.tags.map(tag => (
-                          <Badge key={tag} variant="secondary" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
+                      )}
                     </div>
-                    )}
-                  </div>
                   ) : (
                     <div className="text-center text-muted-foreground py-8">
                       Select a ticket to view details
                     </div>
                   )}
                 </TabsContent>
-                
+
                 <TabsContent value="messages" className="space-y-4">
                   {isLoadingChat ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader className="w-6 h-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : selectedTicket && chatMessages.length > 0 ? (
-                  <ScrollArea className="h-[400px]">
-                    <div className="space-y-4">
-                      {chatMessages.map((chat) => {
-                        // Get avatar initials from sender name
-                        const senderName = chat.SendByName || "Unknown"
-                        const nameParts = senderName.split(" ")
-                        const avatarInitials = nameParts.length >= 2
-                          ? `${nameParts[0][0] || ""}${nameParts[1][0] || ""}`.toUpperCase()
-                          : (nameParts[0]?.[0] || "U").toUpperCase()
-                        
-                        return (
-                          <div key={chat.ChatId} className="space-y-2">
-                            <div className="flex gap-3">
-                              <Avatar className="w-8 h-8">
-                                <AvatarFallback className="text-xs">{avatarInitials}</AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 space-y-1">
-                                <p className="text-sm text-foreground">{chat.Message}</p>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-xs text-muted-foreground">{chat.SendByName}</span>
-                                  {chat.SendToName && (
-                                    <>
-                                      <span className="text-xs text-muted-foreground">→</span>
-                                      <span className="text-xs text-muted-foreground">{chat.SendToName}</span>
-                                    </>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">
-                                    {new Date(chat.CreatedAt).toLocaleString()}
-                                  </span>
+                    <ScrollArea className="h-[400px]">
+                      <div className="space-y-4">
+                        {chatMessages.map((chat) => {
+                          // Get avatar initials from sender name
+                          const senderName = chat.SendByName || "Unknown"
+                          const nameParts = senderName.split(" ")
+                          const avatarInitials = nameParts.length >= 2
+                            ? `${nameParts[0][0] || ""}${nameParts[1][0] || ""}`.toUpperCase()
+                            : (nameParts[0]?.[0] || "U").toUpperCase()
+
+                          return (
+                            <div key={chat.ChatId} className="space-y-2">
+                              <div className="flex gap-3">
+                                <Avatar className="w-8 h-8">
+                                  <AvatarFallback className="text-xs">{avatarInitials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 space-y-1">
+                                  <p className="text-sm text-foreground">{chat.Message}</p>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-xs text-muted-foreground">{chat.SendByName}</span>
+                                    {chat.SendToName && (
+                                      <>
+                                        <span className="text-xs text-muted-foreground">→</span>
+                                        <span className="text-xs text-muted-foreground">{chat.SendToName}</span>
+                                      </>
+                                    )}
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(chat.CreatedAt).toLocaleString()}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            
-                            {/* Display replies if any */}
-                            {chat.Replies && chat.Replies.length > 0 && (
-                              <div className="ml-11 space-y-2 border-l-2 border-muted pl-4">
-                                {chat.Replies.map((reply) => {
-                                  // Replies use ReplySendByName/ReplySendToName, fallback to SendByName/SendToName
-                                  const replyName = reply.ReplySendByName || reply.SendByName || "Unknown"
-                                  const replyNameParts = replyName.split(" ")
-                                  const replyAvatarInitials = replyNameParts.length >= 2
-                                    ? `${replyNameParts[0][0] || ""}${replyNameParts[1][0] || ""}`.toUpperCase()
-                                    : (replyNameParts[0]?.[0] || "U").toUpperCase()
-                                  
-                                  const replyToName = reply.ReplySendToName || reply.SendToName
-                                  
-                                  return (
-                                    <div key={reply.ChatId} className="flex gap-3">
-                                      <Avatar className="w-6 h-6">
-                                        <AvatarFallback className="text-xs">{replyAvatarInitials}</AvatarFallback>
-                                      </Avatar>
-                                      <div className="flex-1 space-y-1">
-                                        <p className="text-xs text-foreground">{reply.Message}</p>
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-semibold text-xs text-muted-foreground">{replyName}</span>
-                                          {replyToName && (
-                                            <>
-                                              <span className="text-xs text-muted-foreground">→</span>
-                                              <span className="text-xs text-muted-foreground">{replyToName}</span>
-                                            </>
-                                          )}
-                                          <span className="text-xs text-muted-foreground">
-                                            {new Date(reply.CreatedAt).toLocaleString()}
-                                          </span>
+
+                              {/* Display replies if any */}
+                              {chat.Replies && chat.Replies.length > 0 && (
+                                <div className="ml-11 space-y-2 border-l-2 border-muted pl-4">
+                                  {chat.Replies.map((reply) => {
+                                    // Replies use ReplySendByName/ReplySendToName, fallback to SendByName/SendToName
+                                    const replyName = reply.ReplySendByName || reply.SendByName || "Unknown"
+                                    const replyNameParts = replyName.split(" ")
+                                    const replyAvatarInitials = replyNameParts.length >= 2
+                                      ? `${replyNameParts[0][0] || ""}${replyNameParts[1][0] || ""}`.toUpperCase()
+                                      : (replyNameParts[0]?.[0] || "U").toUpperCase()
+
+                                    const replyToName = reply.ReplySendToName || reply.SendToName
+
+                                    return (
+                                      <div key={reply.ChatId} className="flex gap-3">
+                                        <Avatar className="w-6 h-6">
+                                          <AvatarFallback className="text-xs">{replyAvatarInitials}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 space-y-1">
+                                          <p className="text-xs text-foreground">{reply.Message}</p>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-semibold text-xs text-muted-foreground">{replyName}</span>
+                                            {replyToName && (
+                                              <>
+                                                <span className="text-xs text-muted-foreground">→</span>
+                                                <span className="text-xs text-muted-foreground">{replyToName}</span>
+                                              </>
+                                            )}
+                                            <span className="text-xs text-muted-foreground">
+                                              {new Date(reply.CreatedAt).toLocaleString()}
+                                            </span>
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </ScrollArea>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </ScrollArea>
                   ) : (
                     <div className="text-center text-muted-foreground py-4">
                       {selectedTicket ? "No messages yet. Start the conversation below." : "Select a ticket to view messages"}
                     </div>
                   )}
-                  
+
                   {selectedTicket && (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Select 
-                        value={sendToUserId?.toString() || "all"} 
-                        onValueChange={(value) => {
-                          if (value === "all") {
-                            setSendToUserId(null)
-                          } else {
-                            setSendToUserId(parseInt(value))
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Send to..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All (General Chat)</SelectItem>
-                          {selectedTicket.assignedUsers && selectedTicket.assignedUsers.length > 0 && (
-                            selectedTicket.assignedUsers.map((user) => (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Select
+                          value={sendToUserId?.toString() || "all"}
+                          onValueChange={(value) => {
+                            if (value === "all") {
+                              setSendToUserId(null)
+                            } else {
+                              setSendToUserId(parseInt(value))
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Send to..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All (General Chat)</SelectItem>
+                            {selectedTicket.assignedUsers && selectedTicket.assignedUsers.length > 0 && (
+                              selectedTicket.assignedUsers.map((user) => (
+                                <SelectItem key={user.UserId} value={user.UserId.toString()}>
+                                  {user.FirstName} {user.LastName}
+                                </SelectItem>
+                              ))
+                            )}
+                            {users.filter(u =>
+                              !selectedTicket.assignedUsers.some(au => au.UserId === u.UserId)
+                            ).map((user) => (
                               <SelectItem key={user.UserId} value={user.UserId.toString()}>
                                 {user.FirstName} {user.LastName}
                               </SelectItem>
-                            ))
-                          )}
-                          {users.filter(u => 
-                            !selectedTicket.assignedUsers.some(au => au.UserId === u.UserId)
-                          ).map((user) => (
-                            <SelectItem key={user.UserId} value={user.UserId.toString()}>
-                              {user.FirstName} {user.LastName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Textarea
-                        placeholder="Type your message..."
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        className="min-h-[60px] flex-1"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                            e.preventDefault()
-                            handleSendMessage()
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between">
-                      {/* <Button variant="outline" size="sm" disabled>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Textarea
+                          placeholder="Type your message..."
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          className="min-h-[60px] flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault()
+                              handleSendMessage()
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between">
+                        {/* <Button variant="outline" size="sm" disabled>
                         <Paperclip className="w-4 h-4 mr-2" />
                         Attach
                       </Button> */}
-                      <Button 
-                        size="sm" 
-                        onClick={handleSendMessage} 
-                        className="bg-gradient-primary"
-                        disabled={isSendingMessage || !newMessage.trim()}
-                      >
-                        {isSendingMessage ? (
-                          <>
-                            <Loader className="w-4 h-4 mr-2 animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4 mr-2" />
-                            Send
-                          </>
-                        )}
-                      </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSendMessage}
+                          className="bg-gradient-primary"
+                          disabled={isSendingMessage || !newMessage.trim()}
+                        >
+                          {isSendingMessage ? (
+                            <>
+                              <Loader className="w-4 h-4 mr-2 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4 mr-2" />
+                              Send
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
                   )}
                 </TabsContent>
-                
+
                 <TabsContent value="attachments" className="space-y-4">
                   {selectedTicket && selectedTicket.attachments && selectedTicket.attachments.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedTicket.attachments.map((filePath, index) => {
-                      // Get original filename (without timestamp prefix)
-                      const originalFileName = getOriginalFileName(filePath)
-                      // Truncate if too long
-                      const displayFileName = truncateFileName(originalFileName, 40)
-                      
-                      // Handle download
-                      const handleDownload = async () => {
-                        try {
-                          const token = localStorage.getItem('token')
-                          if (!token) {
+                    <div className="space-y-2">
+                      {selectedTicket.attachments.map((filePath, index) => {
+                        // Get original filename (without timestamp prefix)
+                        const originalFileName = getOriginalFileName(filePath)
+                        // Truncate if too long
+                        const displayFileName = truncateFileName(originalFileName, 40)
+
+                        // Handle download
+                        const handleDownload = async () => {
+                          try {
+                            const token = localStorage.getItem('token')
+                            if (!token) {
+                              toast({
+                                title: "Error",
+                                description: "Authentication required to download file",
+                                variant: "destructive"
+                              })
+                              return
+                            }
+
+                            // Construct download URL with path parameter
+                            const downloadUrl = `${DOWNLOAD_ATTACHMENT_URL}?path=${encodeURIComponent(filePath)}`
+
+                            // Fetch with authentication
+                            const response = await fetch(downloadUrl, {
+                              method: 'GET',
+                              headers: {
+                                'Authorization': `Bearer ${token}`,
+                              }
+                            })
+
+                            if (!response.ok) {
+                              throw new Error('Failed to download file')
+                            }
+
+                            // Get blob and create download link
+                            const blob = await response.blob()
+                            const url = window.URL.createObjectURL(blob)
+                            const link = document.createElement('a')
+                            link.href = url
+                            link.download = originalFileName
+                            document.body.appendChild(link)
+                            link.click()
+                            document.body.removeChild(link)
+                            window.URL.revokeObjectURL(url)
+                          } catch (error) {
+                            console.error('Download error:', error)
                             toast({
                               title: "Error",
-                              description: "Authentication required to download file",
+                              description: "Failed to download file",
                               variant: "destructive"
                             })
-                            return
                           }
-
-                          // Construct download URL with path parameter
-                          const downloadUrl = `${DOWNLOAD_ATTACHMENT_URL}?path=${encodeURIComponent(filePath)}`
-                          
-                          // Fetch with authentication
-                          const response = await fetch(downloadUrl, {
-                            method: 'GET',
-                            headers: {
-                              'Authorization': `Bearer ${token}`,
-                            }
-                          })
-
-                          if (!response.ok) {
-                            throw new Error('Failed to download file')
-                          }
-
-                          // Get blob and create download link
-                          const blob = await response.blob()
-                          const url = window.URL.createObjectURL(blob)
-                          const link = document.createElement('a')
-                          link.href = url
-                          link.download = originalFileName
-                          document.body.appendChild(link)
-                          link.click()
-                          document.body.removeChild(link)
-                          window.URL.revokeObjectURL(url)
-                        } catch (error) {
-                          console.error('Download error:', error)
-                          toast({
-                            title: "Error",
-                            description: "Failed to download file",
-                            variant: "destructive"
-                          })
                         }
-                      }
-                      
-                      return (
-                        <div key={index} className="flex items-center justify-between gap-2 p-2 border border-border rounded-lg">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                            <span className="text-sm truncate" title={originalFileName}>
-                              {displayFileName}
-                            </span>
+
+                        return (
+                          <div key={index} className="flex items-center justify-between gap-2 p-2 border border-border rounded-lg">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <span className="text-sm truncate" title={originalFileName}>
+                                {displayFileName}
+                              </span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-shrink-0"
+                              onClick={handleDownload}
+                            >
+                              <Download className="w-4 h-4" />
+                            </Button>
                           </div>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="flex-shrink-0"
-                            onClick={handleDownload}
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="text-center text-muted-foreground py-4">
                       {selectedTicket ? "No attachments yet." : "Select a ticket to view attachments"}
                     </div>
                   )}
-                  
+
                   {selectedTicket && (
-                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                    <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Drop files here or <Button variant="link" className="p-0 h-auto">browse</Button>
-                    </p>
-                  </div>
+                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                      <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Drop files here or <Button variant="link" className="p-0 h-auto">browse</Button>
+                      </p>
+                    </div>
                   )}
                 </TabsContent>
               </Tabs>
@@ -2046,16 +2101,16 @@ export default function Tickets() {
                   <MessageSquare className="w-5 h-5" />
                   Team Chat
                 </CardTitle>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => setShowChatPanel(false)}
                 >
                   ×
                 </Button>
               </div>
             </CardHeader>
-            
+
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* Chat List & Messages Area */}
@@ -2077,26 +2132,75 @@ export default function Tickets() {
                         </Select>
                       </div>
                     </div>
-                    
-                    {/* Chat List */}
+
+                    {/* Chat List (Team Chat backed by email conversations API) */}
                     <ScrollArea className="h-[400px]">
                       <div className="space-y-1 p-2">
-                        {/* Mock Chat Items - Replace with actual data from API */}
-                        {users && users.length > 0 ? (
-                          users.slice(0, 5).map((user) => {
-                            const firstName = user.FirstName || ""
-                            const lastName = user.LastName || ""
-                            const userName = `${firstName} ${lastName}`.trim() || "Unknown User"
-                            const avatarInitials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "U"
-                            const hasAttachments = Math.random() > 0.5 // Mock: random for demo
-                            const unreadCount = Math.floor(Math.random() * 5) // Mock: random unread count
-                            const lastMessage = "This is a preview of the last message in this conversation..."
-                            const lastMessageTime = "2 hours ago"
-                            
+                        {isLoadingEmails ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader className="w-5 h-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : emailConversations && emailConversations.length > 0 ? (
+                          emailConversations.map((email: any, index: number) => {
+                            const emailId =
+                              email.emaildetailsid ?? // backend example
+                              // email.EmailDetailsId ??
+                              // email.EmailId ??
+                              // email.EmailID ??
+                              // email.Id ??
+                              // email.id ??
+                              index
+
+                            const senderName =
+                              email.from || // backend example
+                              // email.From ||
+                              // email.FromName ||
+                              // email.SenderName ||
+                              // email.Sender ||
+                              // email.EmailFrom ||
+                              "Unknown sender"
+
+                            const subject =
+                              email.subject || // backend example
+                              // email.Subject ||
+                              // email.EmailSubject ||
+                              // email.SubjectLine ||
+                              "No subject"
+
+                            const previewText =
+                              email.body || // backend example
+                              // email.PreviewText ||
+                              // email.BodyPreview ||
+                              // email.Body ||
+                              // email.Message ||
+                              ""
+
+                            const receivedAt =
+                              email.updatedtime || // backend example
+                              null
+
+                            const hasAttachments =
+                              email.HasAttachments ||
+                              (Array.isArray(email.Attachments) && email.Attachments.length > 0) ||
+                              email.AttachmentCount > 0 ||
+                              false
+
+                            const isSelected = selectedEmailConversation && (selectedEmailConversation.EmailId ?? selectedEmailConversation.EmailID ?? selectedEmailConversation.Id ?? selectedEmailConversation.id) === emailId
+
+                            // Avatar initials from sender name
+                            const nameParts = String(senderName).split(" ")
+                            const avatarInitials =
+                              nameParts.length >= 2
+                                ? `${nameParts[0][0] || ""}${nameParts[1][0] || ""}`.toUpperCase()
+                                : (nameParts[0]?.[0] || "U").toUpperCase()
+
                             return (
-                              <div 
-                                key={user.UserId}
-                                className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-border"
+                              <div
+                                key={emailId}
+                                className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors border ${
+                                  isSelected ? "bg-primary/5 border-primary" : "border-transparent hover:bg-muted/50 hover:border-border"
+                                }`}
+                                onClick={() => setSelectedEmailConversation(email)}
                               >
                                 <Avatar className="w-10 h-10 flex-shrink-0">
                                   <AvatarFallback className="text-sm bg-primary/10 text-primary font-medium">
@@ -2106,42 +2210,27 @@ export default function Tickets() {
                                 <div className="flex-1 min-w-0 space-y-1">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-semibold truncate">{userName}</span>
-                                      {unreadCount > 0 && (
-                                        <Badge variant="default" className="h-5 px-1.5 text-xs bg-primary">
-                                          {unreadCount}
-                                        </Badge>
-                                      )}
+                                      <span className="text-sm font-semibold truncate">{senderName}</span>
                                     </div>
-                                    <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                                      {lastMessageTime}
-                                    </span>
+                                    {receivedAt && (
+                                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                                        {new Date(receivedAt).toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs font-medium text-foreground truncate flex-1">
+                                      {subject}
+                                    </p>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <p className="text-xs text-muted-foreground truncate flex-1">
-                                      {lastMessage}
+                                      {previewText}
                                     </p>
                                     {hasAttachments && (
                                       <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                                     )}
                                   </div>
-                                  {hasAttachments && (
-                                    <div className="flex items-center gap-1 flex-wrap">
-                                      <Badge variant="outline" className="text-xs h-5 px-1.5">
-                                        <FileText className="w-3 h-3 mr-1" />
-                                        document.pdf
-                                      </Badge>
-                                      <Badge variant="outline" className="text-xs h-5 px-1.5">
-                                        <FileText className="w-3 h-3 mr-1" />
-                                        image.png
-                                      </Badge>
-                                      {Math.random() > 0.7 && (
-                                        <Badge variant="outline" className="text-xs h-5 px-1.5">
-                                          +2 more
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                             )
@@ -2149,19 +2238,19 @@ export default function Tickets() {
                         ) : (
                           <div className="text-center text-sm text-muted-foreground py-8">
                             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <p>No conversations yet</p>
-                            <p className="text-xs mt-1">Start a conversation with your team...</p>
+                            <p>No email conversations found</p>
+                            <p className="text-xs mt-1">Emails from the integrated mailbox will appear here.</p>
                           </div>
                         )}
                       </div>
                     </ScrollArea>
                   </div>
-                  
+
                   {/* Message Input */}
                   <div className="flex gap-2">
-                    <Input 
-                      placeholder="Type a message..." 
-                      className="flex-1" 
+                    <Input
+                      placeholder="Type a message..."
+                      className="flex-1"
                     />
                     <Button size="sm" variant="outline" className="flex-shrink-0">
                       <Paperclip className="w-4 h-4" />
@@ -2170,44 +2259,6 @@ export default function Tickets() {
                       <Send className="w-4 h-4" />
                     </Button>
                   </div>
-                </div>
-                
-                {/* Team Members / Recipients List */}
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-sm">Team Members</h4>
-                  <ScrollArea className="h-[500px]">
-                    <div className="space-y-2">
-                      {users && users.length > 0 ? (
-                        users.map((user) => {
-                          const firstName = user.FirstName || ""
-                          const lastName = user.LastName || ""
-                          const userName = `${firstName} ${lastName}`.trim() || "Unknown User"
-                          const avatarInitials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "U"
-                          
-                          return (
-                            <div 
-                              key={user.UserId} 
-                              className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors"
-                            >
-                              <Avatar className="w-8 h-8">
-                                <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
-                                  {avatarInitials}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate">{userName}</div>
-                                <div className="text-xs text-muted-foreground truncate">{user.Email || ""}</div>
-                              </div>
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <div className="text-center text-sm text-muted-foreground py-4">
-                          No team members available
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
                 </div>
               </div>
             </CardContent>

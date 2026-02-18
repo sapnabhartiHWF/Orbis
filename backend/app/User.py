@@ -7,14 +7,14 @@ user_bp = Blueprint("user_bp", __name__)
 
 @user_bp.route("/api/users", methods=["GET"])
 @token_required
-def get_all_users(user_id, user_name):
+def get_all_users():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Fetch all users from santova.SantovaUser via stored procedure.
     """
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
     conn = connect_to_database()
     cursor = conn.cursor()
 

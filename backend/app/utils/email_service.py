@@ -2,11 +2,16 @@
 Email service utility for sending notifications.
 """
 import smtplib
+import logging
+import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import current_app
+from flask import current_app, has_app_context
 from app.Database.connection import connect_to_database
 from config import Config
+
+# Create a logger that works both inside and outside Flask context
+logger = logging.getLogger(__name__)
 
 
 def get_smtp_config():
@@ -23,6 +28,15 @@ def get_smtp_config():
     }
 
 
+def _get_logger():
+    """
+    Get logger that works both inside and outside Flask application context.
+    """
+    if has_app_context():
+        return current_app.logger
+    return logger
+
+
 def get_automation_engineer_emails(DBSCHEMA):
     """
     Get email addresses of all users with 'Automation Engineer' role using stored procedure.
@@ -31,6 +45,7 @@ def get_automation_engineer_emails(DBSCHEMA):
     conn = None
     cursor = None
     emails = []
+    log = _get_logger()
     
     try:
         conn = connect_to_database()
@@ -40,15 +55,18 @@ def get_automation_engineer_emails(DBSCHEMA):
         cursor.execute(f"EXEC {DBSCHEMA}.GetAutomationEngineerEmails")
         
         rows = cursor.fetchall()
-        emails = [row[0] for row in rows if row[0] and row[0].strip()]
+        emails = [row[0].strip() for row in rows if row[0] and row[0].strip() and '@' in row[0]]
+        
+        # Remove duplicates
+        emails = list(set(emails))
         
         if emails:
-            current_app.logger.info(f"Found {len(emails)} Automation Engineer(s) to notify")
+            log.info(f"Found {len(emails)} Automation Engineer(s) to notify")
         else:
-            current_app.logger.warning("No Automation Engineer emails found from stored procedure")
+            log.warning("No Automation Engineer emails found from stored procedure")
         
     except Exception as e:
-        current_app.logger.error(f"Error fetching Automation Engineer emails from stored procedure: {str(e)}")
+        log.error(f"Error fetching Automation Engineer emails from stored procedure: {str(e)}")
         # Return empty list on error - don't fail the upload
         emails = []
     
@@ -74,15 +92,17 @@ def send_email_notification(to_emails, subject, body, html_body=None):
     Returns:
         bool: True if email sent successfully, False otherwise
     """
+    log = _get_logger()
+    
     if not to_emails:
-        current_app.logger.warning("No recipient emails provided for notification")
+        log.warning("No recipient emails provided for notification")
         return False
     
     config = get_smtp_config()
     
     # Check if SMTP is configured
     if not config['smtp_username'] or not config['smtp_password']:
-        current_app.logger.warning("SMTP not configured. Email notification skipped.")
+        log.warning("SMTP not configured. Email notification skipped.")
         return False
     
     try:
@@ -108,11 +128,11 @@ def send_email_notification(to_emails, subject, body, html_body=None):
             server.login(config['smtp_username'], config['smtp_password'])
             server.send_message(msg)
         
-        current_app.logger.info(f"Email notification sent successfully to {len(to_emails)} recipient(s)")
+        log.info(f"Email notification sent successfully to {len(to_emails)} recipient(s)")
         return True
         
     except Exception as e:
-        current_app.logger.error(f"Error sending email notification: {str(e)}")
+        log.error(f"Error sending email notification: {str(e)}")
         return False
 
 
@@ -129,11 +149,13 @@ def send_file_upload_notification(DBSCHEMA, file_name, process_name, uploaded_by
         file_size: Size of the file
         description: Optional file description
     """
-    # Get Automation Engineer emails
-    engineer_emails = get_automation_engineer_emails(DBSCHEMA)
+    log = _get_logger()
     
-    if not engineer_emails:
-        current_app.logger.warning("No Automation Engineer emails found. Notification not sent.")
+    # Get Automation Engineer emails using stored procedure
+    automation_engineer_emails = get_automation_engineer_emails(DBSCHEMA)
+    
+    if not automation_engineer_emails:
+        log.warning("No Automation Engineer emails found. Notification not sent.")
         return False
     
     # Format file size
@@ -148,6 +170,7 @@ def send_file_upload_notification(DBSCHEMA, file_name, process_name, uploaded_by
     
     # Email subject
     subject = f"New File Uploaded: {file_name}"
+    log.info(f"Preparing to send file upload notification. Recipients: {automation_engineer_emails}, Subject: {subject}")
     
     # Plain text body
     body = f"""
@@ -193,5 +216,150 @@ File Details:
     </html>
     """
     
-    return send_email_notification(engineer_emails, subject, body, html_body)
+    return send_email_notification(automation_engineer_emails, subject, body, html_body)
 
+
+def notify_automation_engineers_on_file_upload(DBSCHEMA, file_name, process_name, uploaded_by, file_type, file_size, description=None):
+    """
+    Send email notification to Automation Engineers asynchronously when a new file is uploaded.
+    This function handles the async execution in a background thread.
+    
+    This is a convenience wrapper that should be called from file upload routes.
+    All email sending logic is encapsulated here to prevent accidental removal.
+    
+    Args:
+        DBSCHEMA: Database schema name
+        file_name: Name of the uploaded file
+        process_name: Name of the process/company
+        uploaded_by: Name of the user who uploaded the file
+        file_type: Type of file (document, video, flowchart, image)
+        file_size: Size of the file
+        description: Optional file description
+    
+    Returns:
+        None (runs asynchronously in background thread)
+    """
+    log = _get_logger()
+    
+    def send_email_async():
+        """Internal function to send email in background thread."""
+        try:
+            send_file_upload_notification(
+                DBSCHEMA=DBSCHEMA,
+                file_name=file_name,
+                process_name=process_name,
+                uploaded_by=uploaded_by,
+                file_type=file_type or "document",
+                file_size=file_size,
+                description=description
+            )
+        except Exception as e:
+            log.error(f"Error sending file upload email notification: {str(e)}")
+    
+    # Send email in background thread (non-blocking)
+    threading.Thread(target=send_email_async, daemon=True).start()
+
+
+def send_rule_change_notification(DBSCHEMA, rule_id, proposed_subject, proposed_description, requested_by_name):
+    """
+    Send email notification to Automation Engineers when a rule change is requested.
+
+    Args:
+        DBSCHEMA: Database schema name
+        rule_id: The ID of the rule
+        proposed_subject: The subject of the proposed change
+        proposed_description: The description of the proposed change
+        requested_by_name: Name of the user requesting the change
+    """
+    log = _get_logger()
+    
+    # Get Automation Engineer emails using stored procedure
+    automation_engineer_emails = get_automation_engineer_emails(DBSCHEMA)
+    
+    if not automation_engineer_emails:
+        log.warning("No Automation Engineer emails found. Rule change notification not sent.")
+        return False
+    
+    # Determine application name
+    app_name = "Orbis-Santova" if DBSCHEMA == "santova" else "Orbis-ICAT"
+
+    # Email subject
+    subject = f"Rule Change Request: Rule {rule_id} ({app_name})"
+    log.info(f"Preparing to send rule change notification. Recipients: {automation_engineer_emails}, Subject: {subject}")
+    
+    # Plain text body
+    body = f"""
+A rule change request has been submitted for {app_name}.
+
+Request Details:
+- Application: {app_name}
+- Rule ID: {rule_id}
+- Requested By: {requested_by_name}
+- Proposed Subject: {proposed_subject}
+- Proposed Description: {proposed_description}
+
+Please review the request in the Rulebook system.
+"""
+    
+    # HTML body
+    html_body = f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #2563eb;">Rule Change Request Received</h2>
+        <p>A new rule change request has been submitted for <strong>{app_name}</strong>.</p>
+        
+        <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin: 20px 0;">
+          <h3 style="margin-top: 0; color: #1f2937;">Request Details:</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin: 8px 0;"><strong>Application:</strong> {app_name}</li>
+            <li style="margin: 8px 0;"><strong>Rule ID:</strong> {rule_id}</li>
+            <li style="margin: 8px 0;"><strong>Requested By:</strong> {requested_by_name}</li>
+            <li style="margin: 8px 0;"><strong>Proposed Subject:</strong> {proposed_subject}</li>
+            <li style="margin: 8px 0;"><strong>Proposed Description:</strong> {proposed_description}</li>
+          </ul>
+        </div>
+        
+        <p>Please review the request in the Rulebook Tab.</p>
+        
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="color: #6b7280; font-size: 12px;">This is an automated notification from the Rulebook system.</p>
+      </body>
+    </html>
+    """
+    
+    return send_email_notification(automation_engineer_emails, subject, body, html_body)
+
+
+def notify_automation_engineers_on_rule_change(DBSCHEMA, rule_id, proposed_subject, proposed_description, requested_by_name):
+    """
+    Send email notification to Automation Engineers asynchronously when a rule change is requested.
+    This function handles the async execution in a background thread.
+    
+    Args:
+        DBSCHEMA: Database schema name
+        rule_id: The ID of the rule
+        proposed_subject: The subject of the proposed change
+        proposed_description: The description of the proposed change
+        requested_by_name: Name of the user requesting the change
+    
+    Returns:
+        None (runs asynchronously in background thread)
+    """
+    log = _get_logger()
+    
+    def send_email_async():
+        """Internal function to send email in background thread."""
+        try:
+            send_rule_change_notification(
+                DBSCHEMA=DBSCHEMA,
+                rule_id=rule_id,
+                proposed_subject=proposed_subject,
+                proposed_description=proposed_description,
+                requested_by_name=requested_by_name
+            )
+        except Exception as e:
+            log.error(f"Error sending rule change email notification: {str(e)}")
+    
+    # Send email in background thread (non-blocking)
+    threading.Thread(target=send_email_async, daemon=True).start()
+    

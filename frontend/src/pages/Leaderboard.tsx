@@ -30,8 +30,8 @@ export default function Leaderboard() {
   const [selectedDepartment, setSelectedDepartment] = useState("all")
 
   // Mock data for leaderboard
-  const topContributors = []
-  /* [
+  const topContributors =
+  [
     {
       id: 1,
       name: "Emma Thompson",
@@ -107,10 +107,10 @@ export default function Leaderboard() {
       monthlyRank: 5,
       previousRank: 7
     }
-  ] */
+  ]
 
-  const departmentRankings = []
-  /* [
+  const departmentRankings = 
+  [
     {
       name: "Operations",
       totalPoints: 8450,
@@ -156,10 +156,10 @@ export default function Leaderboard() {
       savings: 1200000,
       rank: 5
     }
-  ] */
+  ]
 
-  const achievementBadges = []
-  /* [
+  const achievementBadges = 
+   [
     {
       name: "Process Pioneer",
       description: "First to submit 10 automation processes",
@@ -208,10 +208,10 @@ export default function Leaderboard() {
       earned: 18,
       total: 156
     }
-  ] */
+  ] 
 
-  const monthlyAwards = []
-  /* [
+  const monthlyAwards = 
+  [
     {
       category: "Top Contributor",
       winner: "Emma Thompson",
@@ -240,7 +240,7 @@ export default function Leaderboard() {
       achievement: "Jumped 2 positions in leaderboard",
       reward: "Mentorship program + skill certification"
     }
-  ] */
+  ]
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -280,7 +280,7 @@ export default function Leaderboard() {
   }
 
   return (
-    <div className="container mx-auto px-6 py-8 space-y-8">
+    <div className="px-6 py-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Leaderboard & Gamification</h1>

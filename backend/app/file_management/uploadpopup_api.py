@@ -1,27 +1,20 @@
 from flask import Blueprint, jsonify, request, current_app
 from app.Database.connection import connect_to_database
 from app.auth_middleware import token_required
-import jwt
 
 process_api = Blueprint('processes_api', __name__)
 
 @process_api.route('/api/processes', methods=['GET'])
 @token_required
-def get_all_processes(user_id, user_name):
+def get_all_processes():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     try:
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
-        # Get token from request to extract CompanyIds
-        token = request.headers.get("Authorization")
-        if token and token.startswith("Bearer "):
-            token = token[7:]
-        
-        # Decode token to get CompanyIds
-        payload = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
-        company_ids = payload.get("CompanyIds")  # this is a list
+        # Get CompanyIds from request.user (set by token_required)
+        company_ids = request.user.get("CompanyIds")  # this is a list
 
         conn = connect_to_database()
         cursor = conn.cursor()
@@ -49,12 +42,12 @@ def get_all_processes(user_id, user_name):
 
 @process_api.route('/api/insert_process', methods=['POST'])
 @token_required
-def insert_company(user_id, user_name):
+def insert_company():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     try:
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         data = request.get_json()
         name = data.get('Name')

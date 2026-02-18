@@ -4,20 +4,24 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingAIAgent } from "@/components/FloatingAIAgent";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
+import UserProfile from "@/components/UserProfile";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setLogoutCallback } from "@/services/api";
 import Index from "./pages/Index";
 import CenterOfExcellence from "./pages/CenterOfExcellence";
 import CollaborationHub from "./pages/CollaborationHub";
+import Success from "./pages/Success";
 import ROIAssessmentEngine from "./pages/ROIAssessmentEngine";
 import Rules from "./pages/Rules";
 import Exceptions from "./pages/Exceptions";
 import Tickets from "./pages/Tickets";
+import TeamChat from "./pages/TeamChat";
 import Agile from "./pages/Agile";
 import Analytics from "./pages/Analytics";
 import Leaderboard from "./pages/Leaderboard";
@@ -25,9 +29,33 @@ import SLA from "./pages/SLA";
 import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/login";
 
-const queryClient = new QueryClient();
+// Configure React Query with optimized defaults for performance
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30000, // 30 seconds - data is considered fresh
+      gcTime: 300000, // 5 minutes - keep in cache
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: false, // Don't refetch if data is fresh
+      retry: 1, // Retry once on failure
+    },
+    mutations: {
+      retry: 0, // Don't retry mutations
+    },
+  },
+});
 
 // Inner component that can use useAuth hook
+const allowedProfileRoles = ["rpa-engineer", "client", "qa", "admin", "automation-lead"];
+
+const RoleProfileRoute = () => {
+  const { role } = useParams();
+  if (!role || !allowedProfileRoles.includes(role)) {
+    return <Navigate to="/profile" replace />;
+  }
+  return <UserProfile />;
+};
+
 const AppContent = () => {
   const { isAuthenticated, isLoading, logout } = useAuth();
 
@@ -61,6 +89,7 @@ const AppContent = () => {
           <header className="h-14 flex items-center border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
             <SidebarTrigger className="ml-4" />
             <div className="flex-1" />
+            <NotificationBell />
             <ThemeToggle />
             <div className="mr-4 text-sm text-muted-foreground">
               Last updated: {new Date().toLocaleTimeString()}
@@ -71,14 +100,18 @@ const AppContent = () => {
               <Route path="/" element={<Index />} />
               <Route path="/center-of-excellence" element={<CenterOfExcellence />} />
               <Route path="/collaboration-hub" element={<CollaborationHub />} />
+              <Route path="/success" element={<Success />} />
               <Route path="/roi-assessment-engine" element={<ROIAssessmentEngine />} />
               <Route path="/sla" element={<SLA />} />
               <Route path="/rules" element={<Rules />} />
               <Route path="/exceptions" element={<Exceptions />} />
               <Route path="/tickets" element={<Tickets />} />
+              <Route path="/team-chat" element={<TeamChat />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/agile" element={<Agile />} />
+              <Route path="/profile/:role" element={<RoleProfileRoute />} />
+              <Route path="/profile" element={<UserProfile />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>

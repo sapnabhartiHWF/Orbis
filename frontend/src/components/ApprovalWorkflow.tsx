@@ -1,587 +1,545 @@
-import { useState, useEffect } from "react";
-import {
-  GitBranch,
-  CheckCircle,
-  XCircle,
-  Clock,
-  User,
-  Plus,
-  Edit,
-  Trash2,
-  Play,
-  Pause,
-  RotateCcw,
-  Calendar,
-  MessageSquare,
-  AlertCircle,
-  Target,
-  File,
-  Zap,
-  Info,
-} from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
-import { toast } from "@/hooks/use-toast";
-import {
-  type ApprovalWorkflow,
-  ApprovalStage,
-  calculateWorkflowProgress,
-  canUserApprove,
-  getNextApprovers,
-  mockTeamMembers,
-  FileUpload,
-  getFileTypeIcon,
-} from "@/utils/collaborationUtils";
+import { useState, useEffect } from "react"
+import { CheckCircle2, XCircle, Clock, User, AlertTriangle, MessageSquare, FileText, Building, TrendingUp, Eye, Tag, Users as UsersIcon } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { toast } from "@/hooks/use-toast"
+import { getAllProcessesSummary, createInitialTriage, getProcessDetail } from "@/services/processRegistrationApi"
+import { Process } from "@/types/ProcessTypes"
 
-interface ApprovalWorkflowProps {
-  processId?: string;
-}
+export function ApprovalWorkflowBoard() {
+  const [processes, setProcesses] = useState<Process[]>([])
+  const [selectedProcess, setSelectedProcess] = useState<Process | null>(null)
+  const [detailedProcess, setDetailedProcess] = useState<any>(null)
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [comment, setComment] = useState("")
+  const [rejectionReason, setRejectionReason] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-const dummyWorkflows: ApprovalWorkflow[] = [
-  {
-    id: "wf1",
-    processId: "P001",
-    name: "Invoice Processing Approval",
-    description:
-      "Multi-stage approval workflow for invoice processing automation requirements",
-    initiatedBy: "Sarah Chen",
-    initiatedAt: "2024-01-20T09:00:00Z",
-    currentStage: 1,
-    status: "in-progress",
-    stages: [
-      {
-        id: "st1",
-        name: "Technical Review",
-        description: "Review technical feasibility and architecture",
-        approvers: ["Emma Thompson", "David Park"],
-        requiredApprovals: 2,
-        currentApprovals: ["Emma Thompson", "David Park"],
-        status: "approved",
-        completedAt: "2024-01-22T14:30:00Z",
-      },
-      {
-        id: "st2",
-        name: "Business Approval",
-        description: "Business stakeholder approval for implementation",
-        approvers: ["Michael Rodriguez", "Lisa Wang"],
-        requiredApprovals: 1,
-        currentApprovals: ["Michael Rodriguez"],
-        status: "approved",
-        completedAt: "2024-01-23T10:15:00Z",
-      },
-      {
-        id: "st3",
-        name: "Executive Sign-off",
-        description: "Final executive approval for budget and go-live",
-        approvers: ["John Smith", "Jane Doe"],
-        requiredApprovals: 1,
-        currentApprovals: [],
-        status: "pending",
-        dueDate: "2024-02-05T17:00:00Z",
-      },
-    ],
-  },
-];
+  // Stages that require approval decisions
+  const APPROVAL_STAGES = [
+    "Initial Triage",
+    "Approval",
+    // Add other stages that require approval here
+  ]
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "approved":
-      return "bg-success/20 text-success-foreground border-success/30";
-    case "rejected":
-      return "bg-destructive/20 text-destructive-foreground border-destructive/30";
-    case "pending":
-      return "bg-warning/20 text-warning-foreground border-warning/30";
-    case "in-progress":
-      return "bg-primary/20 text-primary-foreground border-primary/30";
-    case "cancelled":
-      return "bg-muted text-muted-foreground";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-};
-
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "approved":
-      return <CheckCircle className="w-4 h-4" />;
-    case "rejected":
-      return <XCircle className="w-4 h-4" />;
-    case "pending":
-      return <Clock className="w-4 h-4" />;
-    case "in-progress":
-      return <Play className="w-4 h-4" />;
-    case "cancelled":
-      return <Pause className="w-4 h-4" />;
-    default:
-      return <Clock className="w-4 h-4" />;
-  }
-};
-
-const dataUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/uploaded-details";
-
-export function ApprovalWorkflow({ processId }: ApprovalWorkflowProps) {
-  const [workflows, setWorkflows] =
-    useState<ApprovalWorkflow[]>(dummyWorkflows);
-  const [isNewWorkflowOpen, setIsNewWorkflowOpen] = useState(false);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
-  const [newWorkflow, setNewWorkflow] = useState({
-    name: "",
-    description: "",
-    stages: [] as Partial<ApprovalStage>[],
-  });
-  const currentUser = "John Smith"; // This would come from auth context
-  const [files, setFiles] = useState<FileUpload[]>([]);
-
-  const filteredWorkflows = processId
-    ? workflows.filter((wf) => wf.processId === processId)
-    : workflows;
-
-  // Fetch uploaded files
+  // Load processes from backend
   useEffect(() => {
-    const fetchFiles = async () => {
+    const fetchProcesses = async () => {
       try {
-        const res = await fetch(dataUrl, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          credentials: "include",
-        });
+        setIsLoading(true)
+        const response = await getAllProcessesSummary()
+        
+        if (response?.success && Array.isArray(response.processes)) {
+          // Filter processes in stages that require approval
+          const approvalProcesses = response.processes
+            .filter((p: any) => {
+              const stage = p.CurrentStage ?? p.StageName ?? p.Status ?? ""
+              return APPROVAL_STAGES.includes(stage)
+            })
+            .map((p: any) => {
+              const numericId = p.ProcessId ?? p.process_id ?? p.Id ?? p.id ?? p.ProcessID
+              const id = numericId !== undefined && numericId !== null
+                ? `P${String(numericId).padStart(3, "0")}`
+                : String(p.ProcessCode ?? p.Code ?? "P000")
 
-        if (!res.ok) throw new Error("Failed to fetch files");
-
-        const data = await res.json();
-        if (data.success) {
-          const normalizedFiles = data.files.map((f: any) => {
-            // Determine trigger status from API response
-            const triggerStatus = f.triggerStatus || (f.isTriggered || f.IsTriggered ? "Triggered" : "Not Triggered");
-            const isTriggered = triggerStatus === "Triggered" || f.isTriggered || f.IsTriggered || false;
-            
-            return {
-              id: f.id || Number(f.FileID),
-              name: f.name || f.FileName,
-              type: f.type || f.FileType,
-              format: f.format || f.FileFormat,
-              size: f.size || f.FileSize,
-              uploadedBy: f.uploadedBy || f.UploadedByName,
-              uploadedAt: f.uploadedAt || f.UploadedDate,
-              version: f.version || f.Version || 1,
-              processId: f.processId || f.ProcessID,
-              processName: f.processName || f.ProcessName,
-              description: f.description || f.Description,
-              tags: f.tags || f.Tags || [],
-              status: f.status || "ready",
-              isTriggered: isTriggered,
-              triggerStatus: triggerStatus,
-              triggeredAt: isTriggered ? (f.triggeredAt || f.TriggeredAt || f.TriggeredDate || f.uploadedAt || null) : null,
-              notTriggeredReason: !isTriggered ? (f.notTriggeredReason || f.NotTriggeredReason || f.Reason || null) : null,
-              approvedAt: f.approvedAt || f.ApprovedAt || f.ApprovedDate || null,
-            };
-          });
-          setFiles(normalizedFiles);
-        } else {
-          setFiles([]);
+              return {
+                id,
+                title: p.Title ?? p.title ?? "",
+                description: p.Description ?? p.description ?? "",
+                department: p.Department ?? p.department ?? "",
+                priority: (p.Priority ?? p.priority ?? "Medium") as "Low" | "Medium" | "High" | "Critical",
+                expectedROI: Number(p.ExpectedROI ?? p.expectedROI ?? 0),
+                status: (p.CurrentStage ?? p.StageName ?? p.Status ?? "Initial Triage") as any,
+                submittedBy: p.CreatedByName ?? p.createdByName ?? "Unknown",
+                submittedDate: p.SubmittedDate ?? p.submittedDate ?? p.CreatedAt ?? p.createdAt ?? new Date().toISOString(),
+                estimatedSavings: Number(p.EstimatedSavings ?? p.estimatedSavings ?? 0),
+                complexity: (p.Complexity ?? p.complexity ?? "Medium") as "Low" | "Medium" | "High",
+                dependencies: [],
+                stakeholders: p.Stakeholder
+                  ? String(p.Stakeholder).split(",").map((s: string) => s.trim()).filter(Boolean)
+                  : [],
+                tags: p.Tag
+                  ? String(p.Tag).split(",").map((t: string) => t.trim()).filter(Boolean)
+                  : [],
+              }
+            })
+          
+          setProcesses(approvalProcesses)
         }
-      } catch (err: any) {
-        console.error(err);
-        setFiles([]);
+      } catch (error: any) {
+        console.error("Error loading processes:", error)
+        toast({
+          title: "Failed to load processes",
+          description: error?.message || "Unable to fetch process list.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
-    };
+    }
 
-    fetchFiles();
-  }, []);
+    fetchProcesses()
+  }, [])
 
-  // Filter files by processId if provided
-  const filteredFiles = files.filter((file) => {
-    if (!processId) return true;
-    return file.processId?.toString() === processId;
-  });
+  // Load detailed process information
+  const handleViewDetails = async () => {
+    if (!selectedProcess) return
 
-  const handleCreateWorkflow = () => {
-    const workflow: ApprovalWorkflow = {
-      id: `wf${Date.now()}`,
-      processId: processId || "P000",
-      name: newWorkflow.name,
-      description: newWorkflow.description,
-      initiatedBy: currentUser,
-      initiatedAt: new Date().toISOString(),
-      currentStage: 0,
-      status: "draft",
-      stages: newWorkflow.stages.map((stage, index) => ({
-        id: `st${Date.now()}_${index}`,
-        name: stage.name || "",
-        description: stage.description || "",
-        approvers: stage.approvers || [],
-        requiredApprovals: stage.requiredApprovals || 1,
-        currentApprovals: [],
-        status: "pending",
-      })) as ApprovalStage[],
-    };
-
-    setWorkflows((prev) => [...prev, workflow]);
-    setIsNewWorkflowOpen(false);
-    setNewWorkflow({ name: "", description: "", stages: [] });
-
-    toast({
-      title: "Workflow created! 🎯",
-      description:
-        "Your approval workflow has been set up and is ready to start.",
-    });
-  };
-
-  const handleApprove = (workflowId: string, stageId: string) => {
-    setWorkflows((prev) =>
-      prev.map((wf) => {
-        if (wf.id === workflowId) {
-          const updatedStages = wf.stages.map((stage) => {
-            if (stage.id === stageId) {
-              const updatedApprovals = [...stage.currentApprovals, currentUser];
-              const status: ApprovalStage["status"] =
-                updatedApprovals.length >= stage.requiredApprovals
-                  ? "approved"
-                  : "pending";
-
-              return {
-                ...stage,
-                currentApprovals: updatedApprovals,
-                status,
-                completedAt:
-                  status === "approved" ? new Date().toISOString() : undefined,
-              };
-            }
-            return stage;
-          });
-
-          // Check if we should move to next stage or complete workflow
-          const currentStage = updatedStages[wf.currentStage];
-          let newCurrentStage = wf.currentStage;
-          let newStatus = wf.status;
-
-          if (
-            currentStage.status === "approved" &&
-            wf.currentStage < updatedStages.length - 1
-          ) {
-            newCurrentStage = wf.currentStage + 1;
-          } else if (
-            currentStage.status === "approved" &&
-            wf.currentStage === updatedStages.length - 1
-          ) {
-            newStatus = "approved";
-          }
-
-          return {
-            ...wf,
-            stages: updatedStages,
-            currentStage: newCurrentStage,
-            status: newStatus,
-            completedAt:
-              newStatus === "approved" ? new Date().toISOString() : undefined,
-          };
+    try {
+      const numericId = parseInt(selectedProcess.id.replace(/\D/g, ""), 10)
+      if (!isNaN(numericId)) {
+        const response = await getProcessDetail(numericId)
+        if (response?.success && response.process) {
+          setDetailedProcess(response.process)
+          setIsDetailsDialogOpen(true)
+        } else {
+          toast({
+            title: "Failed to load details",
+            description: "Unable to fetch process details.",
+            variant: "destructive",
+          })
         }
-        return wf;
+      }
+    } catch (error: any) {
+      console.error("Error loading process details:", error)
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to load process details.",
+        variant: "destructive",
       })
-    );
+    }
+  }
 
-    toast({
-      title: "Approval submitted! ✅",
-      description: "Your approval has been recorded and the workflow updated.",
-    });
-  };
+  const handleApprovalSubmit = async (status: "Approved" | "Rejected") => {
+    if (!selectedProcess) return
 
-  const handleReject = (
-    workflowId: string,
-    stageId: string,
-    reason: string
-  ) => {
-    setWorkflows((prev) =>
-      prev.map((wf) => {
-        if (wf.id === workflowId) {
-          const updatedStages = wf.stages.map((stage) => {
-            if (stage.id === stageId) {
-              return {
-                ...stage,
-                status: "rejected" as ApprovalStage["status"],
-                completedAt: new Date().toISOString(),
-                comments: reason,
-              };
-            }
-            return stage;
-          });
+    const numericProcessId = parseInt(selectedProcess.id.replace(/\D/g, ""), 10)
 
-          return {
-            ...wf,
-            stages: updatedStages,
-            status: "rejected" as ApprovalWorkflow["status"],
-            completedAt: new Date().toISOString(),
-            finalDecision: reason,
-          };
-        }
-        return wf;
+    if (!numericProcessId || isNaN(numericProcessId)) {
+      toast({
+        title: "Invalid Process ID",
+        description: "Unable to process approval request.",
+        variant: "destructive",
       })
-    );
+      return
+    }
 
-    toast({
-      title: "Workflow rejected",
-      description:
-        "The workflow has been rejected and stakeholders will be notified.",
-    });
-  };
+    if (status === "Rejected" && !rejectionReason.trim()) {
+      toast({
+        title: "Rejection Reason Required",
+        description: "Please provide a reason for rejecting this process.",
+        variant: "destructive",
+      })
+      return
+    }
 
-  const addNewStage = () => {
-    setNewWorkflow((prev) => ({
-      ...prev,
-      stages: [
-        ...prev.stages,
-        {
-          name: "",
-          description: "",
-          approvers: [],
-          requiredApprovals: 1,
-        },
-      ],
-    }));
-  };
+    try {
+      setIsSubmitting(true)
 
-  const updateStage = (index: number, field: string, value: any) => {
-    setNewWorkflow((prev) => ({
-      ...prev,
-      stages: prev.stages.map((stage, i) =>
-        i === index ? { ...stage, [field]: value } : stage
-      ),
-    }));
-  };
+      const payload = {
+        ProcessId: numericProcessId,
+        IsRuleBased: true, // Default values for approval workflow
+        IsStable: true,
+        AreExceptionsManageable: true,
+        ComplianceRisk: false,
+        ComplianceRiskSummary: undefined,
+        SystemsInvolved: undefined,
+        Blockers: undefined,
+        EstimatedAutomationPercent: undefined,
+        ApprovalStatus: status,
+        RejectionReason: status === "Rejected" ? rejectionReason.trim() : undefined,
+      } as const
 
-  const removeStage = (index: number) => {
-    setNewWorkflow((prev) => ({
-      ...prev,
-      stages: prev.stages.filter((_, i) => i !== index),
-    }));
-  };
+      const response = await createInitialTriage(payload)
+
+      if (response.success) {
+        toast({
+          title: status === "Approved" ? "Process Approved! ✅" : "Process Rejected",
+          description:
+            status === "Approved"
+              ? "Process approved and moved to System Integration stage."
+              : "Process has been rejected in Initial Triage.",
+        })
+
+        // Refresh the list
+        setSelectedProcess(null)
+        setComment("")
+        setRejectionReason("")
+        window.location.reload()
+      } else {
+        throw new Error(response.message || "Failed to process approval")
+      }
+    } catch (error: any) {
+      console.error("Error processing approval:", error)
+      toast({
+        title: "Approval Failed",
+        description: error?.message || "Something went wrong while processing the approval.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "Low":
+        return "bg-muted text-muted-foreground"
+      case "Medium":
+        return "bg-warning/20 text-warning-foreground border-warning/30"
+      case "High":
+        return "bg-destructive/20 text-destructive-foreground border-destructive/30"
+      case "Critical":
+        return "bg-gradient-danger text-white border-destructive shadow-glow"
+      default:
+        return "bg-muted text-muted-foreground"
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <CheckCircle2 className="w-8 h-8 text-primary" />
         <div>
-          <h3 className="text-2xl font-semibold">Approval Workflows</h3>
-          <p className="text-muted-foreground">
-            Manage multi-stage approval processes
-          </p>
+          <h2 className="text-2xl font-semibold">Approval Workflow Board</h2>
+          <p className="text-muted-foreground">Processes awaiting Initial Triage approval</p>
         </div>
       </div>
 
-      {/* Workflows List */}
-      {filteredWorkflows.length === 0 ? (
-        <Card className="bg-card border-border shadow-card">
-          <CardContent className="p-12 text-center">
-            <GitBranch className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h4 className="font-medium mb-2">No workflows found</h4>
-            <p className="text-muted-foreground mb-4">
-              Create your first approval workflow to get started
-            </p>
-            <Button onClick={() => setIsNewWorkflowOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Workflow
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {filteredWorkflows.map((workflow) => (
-            <Card
-              key={workflow.id}
-              className="bg-gradient-card border-border shadow-card"
-            >
-
-              <CardContent className="space-y-6">
-                {/* Workflow Actions */}
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    Initiated by {workflow.initiatedBy} on{" "}
-                    {new Date(workflow.initiatedAt).toLocaleDateString()}
-                  </div>
-                </div>
-
-                {/* Uploaded Files Section */}
-                {filteredFiles.length > 0 && (
-                  <>
-                    <Separator />
-                    <div className="space-y-4">
-                      {/* Section Header */}
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-primary/10">
-                          <File className="w-4 h-4 text-primary" />
-                        </div>
-                        <h3 className="text-sm font-semibold">
-                          Uploaded Files
-                        </h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {filteredFiles.length}
-                        </Badge>
-                      </div>
-
-                      {/* Files List */}
-                      <div className="space-y-3">
-                        {filteredFiles.map((file) => {
-                          // Determine trigger status
-                          const isTriggered = (file as any).isTriggered || false;
-                          const triggeredAt = (file as any).triggeredAt || (file as any).approvedAt;
-                          const notTriggeredReason = (file as any).notTriggeredReason;
-
-                          return (
-                            <div
-                              key={file.id}
-                              className="group relative bg-gradient-to-r from-muted/30 to-muted/20 rounded-lg border border-border hover:border-primary/30 transition-all p-4 shadow-sm hover:shadow-md"
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                {/* Left: File Info */}
-                                <div className="flex items-start gap-3 flex-1 min-w-0">
-                                  <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors flex-shrink-0">
-                                    <div className="w-6 h-6 flex items-center justify-center text-primary">
-                                      {getFileTypeIcon(file.format)}
-                                    </div>
-                                  </div>
-                                  <div className="flex-1 min-w-0 space-y-1.5">
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="font-semibold text-sm text-foreground truncate">
-                                        {file.name}
-                                      </h4>
-                                      {file.status === "ready" && (
-                                        <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
-                                      )}
-                                    </div>
-                                    {file.description && (
-                                      <p className="text-xs text-muted-foreground line-clamp-1">
-                                        {file.description}
-                                      </p>
-                                    )}
-                                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                      {file.uploadedBy && (
-                                        <div className="flex items-center gap-1.5">
-                                          <User className="w-3.5 h-3.5" />
-                                          <span>Uploaded by {file.uploadedBy}</span>
-                                        </div>
-                                      )}
-                                      {file.uploadedAt && (
-                                        <div className="flex items-center gap-1.5">
-                                          <Clock className="w-3.5 h-3.5" />
-                                          <span>
-                                            {new Date(file.uploadedAt).toLocaleDateString()}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                    
-                                    {/* Trigger Status Information */}
-                                    <div className="pt-2">
-                                      {isTriggered ? (
-                                        <div className="flex items-start gap-2 p-2 rounded-md bg-success/10 border border-success/20">
-                                          <Zap className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="text-xs font-medium text-success mb-0.5">
-                                              Process Triggered
-                                            </div>
-                                            {triggeredAt && (
-                                              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                                <Calendar className="w-3 h-3" />
-                                                <span>
-                                                  Triggered on{" "}
-                                                  {new Date(triggeredAt).toLocaleDateString("en-US", {
-                                                    year: "numeric",
-                                                    month: "short",
-                                                    day: "numeric",
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                  })}
-                                                </span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 border border-warning/20">
-                                          <Info className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="text-xs font-medium text-warning mb-0.5">
-                                              Not Triggered
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                              {notTriggeredReason ? (
-                                                <span>Reason: {notTriggeredReason}</span>
-                                              ) : (
-                                                <span>Process has not been triggered yet</span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Right: Trigger Status Badge */}
-                                <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                                  <Badge
-                                    className={`text-xs font-medium px-3 py-1 ${
-                                      isTriggered
-                                        ? "bg-success/20 text-success border-success/30 hover:bg-success/30"
-                                        : "bg-warning/20 text-warning border-warning/30 hover:bg-warning/30"
-                                    }`}
-                                  >
-                                    {isTriggered ? (
-                                      <>
-                                        <Zap className="w-3 h-3 mr-1" />
-                                        Triggered
-                                      </>
-                                    ) : (
-                                      "Not Triggered"
-                                    )}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Approval List */}
+        <div className="space-y-4">
+          {isLoading ? (
+            <Card className="bg-gradient-card shadow-card">
+              <CardContent className="p-12 text-center">
+                <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50 animate-spin" />
+                <p className="text-muted-foreground">Loading processes...</p>
               </CardContent>
             </Card>
-          ))}
+          ) : processes.length === 0 ? (
+            <Card className="bg-gradient-card shadow-card">
+              <CardContent className="p-12 text-center">
+                <CheckCircle2 className="w-16 h-16 mx-auto mb-4 text-success opacity-50" />
+                <p className="text-muted-foreground mb-2">No processes awaiting approval</p>
+                <p className="text-sm text-muted-foreground">All processes in Initial Triage have been reviewed</p>
+              </CardContent>
+            </Card>
+          ) : (
+            processes.map((process) => (
+              <Card 
+                key={process.id} 
+                className={`bg-gradient-card shadow-card cursor-pointer hover:shadow-elevated transition-all ${
+                  selectedProcess?.id === process.id ? 'ring-2 ring-primary' : ''
+                }`}
+                onClick={() => setSelectedProcess(process)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {process.id}
+                        </Badge>
+                        <Badge className={getPriorityColor(process.priority)}>
+                          {process.priority}
+                        </Badge>
+                      </div>
+                      <CardTitle className="text-lg">{process.title}</CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Submitted by {process.submittedBy} • {new Date(process.submittedDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge className="bg-warning/20 text-warning-foreground border-warning/30">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Pending
+                    </Badge>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {process.description}
+                  </p>
+
+                  <div className="flex items-center justify-between text-sm pt-2 border-t">
+                    <div className="flex items-center gap-2">
+                      <Building className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">{process.department}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="font-semibold text-success">
+                        ${process.expectedROI.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
-      )}
+
+        {/* Approval Details */}
+        <Card className="bg-gradient-card shadow-card sticky top-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              {selectedProcess ? "Approval Details" : "Select Process"}
+            </CardTitle>
+          </CardHeader>
+          
+          <CardContent>
+            {selectedProcess ? (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-lg">{selectedProcess.title}</h3>
+                    <Badge variant="outline">{selectedProcess.id}</Badge>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Business Justification:</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedProcess.description}
+                    </p>
+                  </div>
+
+                  <Separator />
+
+                  {/* Process Details Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Department</p>
+                      <p className="font-medium">{selectedProcess.department}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Priority</p>
+                      <Badge className={getPriorityColor(selectedProcess.priority)}>
+                        {selectedProcess.priority}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Expected ROI</p>
+                      <p className="font-semibold text-success">
+                        ${selectedProcess.expectedROI.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Submitted By</p>
+                      <p className="font-medium">{selectedProcess.submittedBy}</p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* View Full Details Button */}
+                  <Button
+                    variant="outline"
+                    onClick={handleViewDetails}
+                    className="w-full"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Full Process Details
+                  </Button>
+
+                  <Separator />
+
+                  {/* Approval Comments */}
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold">Approval Comments</p>
+                    <Textarea
+                      placeholder="Add your comments for this approval decision..."
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      className="min-h-[80px]"
+                    />
+                  </div>
+
+                  {/* Rejection Reason */}
+                  <div className="space-y-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                      <p className="text-sm font-semibold">Rejection Reason (Required if rejecting)</p>
+                    </div>
+                    <Textarea
+                      placeholder="Explain why this process is being rejected..."
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      className="min-h-[60px] bg-white dark:bg-gray-900"
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => handleApprovalSubmit("Rejected")}
+                      disabled={isSubmitting}
+                      className="flex-1 border-2 border-destructive/30 text-destructive hover:bg-destructive/10"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Reject Process
+                    </Button>
+                    <Button
+                      size="lg"
+                      onClick={() => handleApprovalSubmit("Approved")}
+                      disabled={isSubmitting}
+                      className="flex-1 bg-success hover:bg-success/90 text-white"
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Approve Process
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                <AlertTriangle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Select a process to view approval details</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Process Details Dialog */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">{selectedProcess?.title}</DialogTitle>
+            <DialogDescription>
+              Complete process information and details
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailedProcess && selectedProcess && (
+            <div className="space-y-6 mt-4">
+              {/* Process ID and Status */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="text-sm font-mono">
+                  {selectedProcess.id}
+                </Badge>
+                <Badge className={getPriorityColor(selectedProcess.priority)}>
+                  {selectedProcess.priority}
+                </Badge>
+                <Badge className="bg-warning/20 text-warning-foreground border-warning/30">
+                  {selectedProcess.status}
+                </Badge>
+              </div>
+
+              {/* Description */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Description</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{selectedProcess.description}</p>
+                </CardContent>
+              </Card>
+
+              {/* Process Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Building className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      Process Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Department:</span>
+                      <span className="font-medium">{selectedProcess.department}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Submitted By:</span>
+                      <span className="font-medium">{selectedProcess.submittedBy}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Submitted Date:</span>
+                      <span className="font-medium">
+                        {new Date(selectedProcess.submittedDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Complexity:</span>
+                      <Badge variant="outline">{selectedProcess.complexity}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      Financial Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between items-center p-3 rounded-lg bg-success/10 border border-success/20">
+                      <span className="text-sm font-medium">Expected ROI:</span>
+                      <span className="text-lg font-bold text-success">
+                        ${selectedProcess.expectedROI.toLocaleString()}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tags and Stakeholders */}
+              {(selectedProcess.tags.length > 0 || selectedProcess.stakeholders.length > 0) && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold">
+                      Tags & Stakeholders
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {selectedProcess.tags.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                          <Tag className="w-3 h-3" />
+                          Tags
+                        </Label>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedProcess.tags.map((tag, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedProcess.stakeholders.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                          <UsersIcon className="w-3 h-3" />
+                          Stakeholders
+                        </Label>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedProcess.stakeholders.map((stakeholder, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {stakeholder}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
-  );
+  )
 }

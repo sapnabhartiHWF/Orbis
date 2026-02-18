@@ -26,10 +26,8 @@ def login():
     data = request.get_json()
     email = data.get("email")
     password = data.get("password")
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
 
     if not email or not password:
         return jsonify({"message": "Email and password required"}), 400
@@ -177,10 +175,8 @@ def verify_otp():
     data = request.get_json()
     email = data.get("email")
     otp = data.get("otp")
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
 
     if not email or not otp:
         return jsonify({"message": "Email and OTP are required"}), 400
@@ -307,10 +303,8 @@ def logout():
         if not user_id:
             return jsonify({"message": "Invalid token"}), 401
 
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         # Call logout stored procedure
         conn = connect_to_database()

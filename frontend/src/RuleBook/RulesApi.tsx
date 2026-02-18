@@ -1,30 +1,32 @@
 export interface Rule {
-    rule: string;
-    rule_description: string;
-    rule_id: string;
-    rule_process_name: string;
-    rule_process_owner: string;
-    rule_stage: string;
-    rule_status: string;
-    rule_subject: string;
-    rule_version: string;
+  RuleId: string;
+  Subject: string;
+  Description: string;
+  CreatedOn: string;
+  UpdatedOn: string;
+  BotId: string;
+  BotName: string;
+  RuleLogic: string;
+}
+
+const url = "http://127.0.0.1:8000/api/rulebook";
+
+export const fetchRulesData = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!response.ok)
+      throw new Error(`Failed to fetch rules: ${response.status}`);
+    const data = await response.json();
+    return data.rulebooks || [];
+  } catch (error) {
+    console.error("Error fetching rules details:", error);
+    throw error;
   }
-  
-  const url = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//rulebook/";
-  
-  export const fetchRulesData = async () => {
-    try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok)
-        throw new Error(`Failed to fetch rules: ${response.status}`);
-      const data = await response.json();
-      console.log("rules:", data);
-      return data;
-    } catch (error) {
-      console.error("Error fetching rules details:", error);
-      throw error;
-    }
-  };
+};

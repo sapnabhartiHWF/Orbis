@@ -1,7 +1,7 @@
 from app.databaseconnection import db_connect
 from flask import Blueprint, jsonify, request
 from app.auth_middleware import token_required
-from app.db_schema_utils import get_airline_schema
+from app.db_schema_utils import get_bot_schema
 
 # Create blueprint for bots routes
 bots_bp = Blueprint("bots_bp", __name__)
@@ -49,13 +49,15 @@ def get_bot_names(schema: str = "AirlineProcessHeaderDetail"):
 
 @bots_bp.route("/api/bots", methods=["GET"])
 @token_required
-def get_bot_names_api(user_id, user_name):
+def get_bot_names_api():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Get all active bot names from the database.
     Uses AirlineProcessHeaderDetail schema for ICAT URL, santova for others.
     """
     try:
-        SCHEMA = get_airline_schema()
+        SCHEMA = get_bot_schema()
         bot_names = get_bot_names(SCHEMA)
         return jsonify({
             "success": True,

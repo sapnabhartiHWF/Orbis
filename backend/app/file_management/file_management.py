@@ -1,13 +1,19 @@
 from flask import Blueprint, request, jsonify, current_app
 from app.Database.connection import connect_to_database
+from app.databaseconnection import db_connect
 from app.auth_middleware import token_required
-from app.utils.email_service import send_file_upload_notification
 from app.file_management.ftp_utils import get_ftp_manager
+from app.utils.db_schema import get_db_schema
+from app.db_schema_utils import get_bot_schema
 import os
 import re
+import requests
+import threading
 from werkzeug.utils import secure_filename
 from flask import send_file
 from datetime import datetime
+from app.utils.email_service import notify_automation_engineers_on_file_upload
+from config import Config
 
 file_bp = Blueprint("file_bp", __name__)
 
@@ -33,7 +39,8 @@ def allowed_file(filename):
 
 def get_process_name(DBSCHEMA, process_id):
     """
-    Retrieves the process name (Company name) from ProcessID.
+    Retrieves the process name from ProcessID.
+    First checks Company table, then ProcessOnboarding table.
     Returns a sanitized folder-safe name.
     """
     if not process_id:
@@ -45,6 +52,7 @@ def get_process_name(DBSCHEMA, process_id):
         conn = connect_to_database()
         cursor = conn.cursor()
         
+        # First, try to get from Company table (for regular processes)
         cursor.execute(f"""
             SELECT Name 
             FROM {DBSCHEMA}.Company 
@@ -54,8 +62,20 @@ def get_process_name(DBSCHEMA, process_id):
         result = cursor.fetchone()
         if result and result[0]:
             return sanitize_folder_name(result[0])
-        else:
-            return f"Process_{process_id}"
+        
+        # If not found in Company table, try ProcessOnboarding table (for onboarding processes)
+        cursor.execute(f"""
+            SELECT Name 
+            FROM {DBSCHEMA}.ProcessOnboarding 
+            WHERE Oid = %s
+        """, (process_id,))
+        
+        result = cursor.fetchone()
+        if result and result[0]:
+            return sanitize_folder_name(result[0])
+        
+        # If still not found, return a default name
+        return f"Process_{process_id}"
     
     except Exception as e:
         current_app.logger.error(f"Error fetching process name for ProcessID={process_id}: {str(e)}")
@@ -75,45 +95,38 @@ def sanitize_folder_name(name):
     """
     if not name:
         return "Unnamed"
-    
-    # Remove or replace invalid characters for Windows/Unix filesystems
-    # Invalid: < > : " / \ | ? *
     sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
-    
-    # Remove leading/trailing spaces and dots (Windows doesn't allow trailing dots)
     sanitized = sanitized.strip('. ')
-    
-    # Replace multiple underscores/spaces with single underscore
     sanitized = re.sub(r'[_\s]+', '_', sanitized)
-    
-    # Limit length to avoid filesystem issues
     if len(sanitized) > 100:
         sanitized = sanitized[:100]
-    
-    # If empty after sanitization, use default
     if not sanitized:
         sanitized = "Unnamed"
     
     return sanitized
 
-@file_bp.route("/api/file-management", methods=["POST"])
+@file_bp.route("/api/process/<int:bot_id>/file-management", methods=["POST"])
 @token_required
-def upload_file_route(user_id, user_name):
-    """
-    Uploads a file and saves metadata to DB
-    """
+def upload_file_route(bot_id):
+    user_id = request.user.get("UserId")
+    user_name = request.user.get("UserName")
+
     if "file" not in request.files:
         return jsonify({"success": False, "message": "No file uploaded"}), 400
 
     file = request.files["file"]
-    process_id = request.form.get("ProcessID")
     description = request.form.get("Description")
-    file_type = request.form.get("FileType")  # ✅ dropdown-selected type (e.g. Document, Image, Video, etc.)
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
-    if not file or file.filename == "":
+    file_type = request.form.get("FileType")
+    
+    # Determine which schema and database connection to use
+    # get_bot_schema() returns "AirlineProcessHeaderDetail" for ICAT/localhost, "santova" for santova URL
+    DBSCHEMA = get_bot_schema()
+    
+    # If schema is "santova", use connect_to_database() (DB_A4EFFD_Hybridwf)
+    # Otherwise (AirlineProcessHeaderDetail), use db_connect() (db_Icat)
+    use_db_connect = DBSCHEMA != "santova"
+
+    if file.filename == "":
         return jsonify({"success": False, "message": "No file selected"}), 400
 
     if not allowed_file(file.filename):
@@ -121,284 +134,296 @@ def upload_file_route(user_id, user_name):
 
     filename = secure_filename(file.filename)
     file_format = filename.rsplit(".", 1)[1].lower()
-    mime_type = file.content_type 
-    file_size = len(file.read())
+    mime_type = file.content_type or "application/octet-stream"
+    file_size = request.content_length or len(file.read())
     file.seek(0)
 
-    # Get process name and create folder structure: uploads/process_name/
-    process_name = get_process_name(DBSCHEMA, process_id)
+    # ✅ Bot-based folder - get bot name from AirlineProcessHeaderDetail.Bots using db_connect()
+    bot_name = None
+    if use_db_connect:
+        try:
+            bot_conn = db_connect()
+            if bot_conn:
+                bot_cursor = bot_conn.cursor()
+                bot_cursor.execute(f"""
+                    SELECT Name 
+                    FROM {DBSCHEMA}.Bots 
+                    WHERE Bot_Id = %s AND IsDeleted = 0
+                """, (bot_id,))
+                bot_result = bot_cursor.fetchone()
+                if bot_result and bot_result[0]:
+                    bot_name = sanitize_folder_name(bot_result[0])
+                bot_cursor.close()
+                bot_conn.close()
+        except Exception as e:
+            current_app.logger.error(f"Error fetching bot name for Bot_Id={bot_id}: {str(e)}")
+    
+    process_name = bot_name or f"Bot_{bot_id}"
     process_folder = os.path.join(UPLOAD_FOLDER, process_name)
     os.makedirs(process_folder, exist_ok=True)
+
     file_path = os.path.join(process_folder, filename)
     file.save(file_path)
 
-    # Upload to FTP server if configured (use schema-specific credentials and paths)
-    ftp_upload_success = False
-    ftp_message = ""
-    ftp_manager = get_ftp_manager(DBSCHEMA)
+    # FTP upload - upload to FTP server synchronously to ensure it completes
+    # For FTP credentials: use get_db_schema() to get "ICAT" or "santova"
+    # (get_ftp_manager expects "ICAT" or "santova", not "AirlineProcessHeaderDetail")
+    FTP_SCHEMA = get_db_schema()  # Returns "ICAT" for ICAT URL/localhost, "santova" for santova URL
+    ftp_manager = get_ftp_manager(FTP_SCHEMA)
+    ftp_path = None
+    
     if ftp_manager:
         try:
-            # Create FTP remote directory path using actual process name
-            # Sanitize process name for FTP path
             ftp_process_name = sanitize_folder_name(process_name)
-            
-            # FTP structure uses process name directly (schema only determines which FTP credentials to use)
             remote_directory = f"/{ftp_process_name}"
+            current_app.logger.info(f"Starting FTP upload: local={file_path}, remote_dir={remote_directory}, filename={filename}")
             
-            # Upload to FTP
-            ftp_upload_success, ftp_message = ftp_manager.upload_file(
+            ftp_success, ftp_msg = ftp_manager.upload_file(
                 local_file_path=file_path,
                 remote_directory=remote_directory,
                 remote_filename=filename
             )
             
-            if ftp_upload_success:
-                current_app.logger.info(f"File uploaded to FTP: {remote_directory}/{filename}")
+            if ftp_success:
+                ftp_path = f"{remote_directory}/{filename}".replace('//', '/')
+                current_app.logger.info(f"FTP upload successful: {ftp_path}")
             else:
-                current_app.logger.warning(f"FTP upload failed: {ftp_message}")
-        except Exception as ftp_error:
-            # Log FTP error but don't fail the main upload
-            current_app.logger.error(f"FTP upload error: {str(ftp_error)}")
-            ftp_message = f"FTP upload error: {str(ftp_error)}"
+                # Log warning but continue - store local path as fallback
+                current_app.logger.warning(f"FTP upload failed: {ftp_msg}. Storing local path instead.")
+                ftp_path = None
+        except Exception as e:
+            # Log error but continue - store local path as fallback
+            current_app.logger.error(f"FTP upload exception: {str(e)}. Storing local path instead.")
+            ftp_path = None
 
-    conn = connect_to_database()
+    # Use appropriate database connection based on schema
+    if use_db_connect:
+        # For AirlineProcessHeaderDetail schema: use db_connect() (db_Icat database)
+        conn = db_connect()
+    else:
+        # For santova schema: use connect_to_database() (DB_A4EFFD_Hybridwf database)
+        conn = connect_to_database()
+    
+    if not conn:
+        return jsonify({"success": False, "message": "Database connection failed"}), 500
+    
     cursor = conn.cursor()
 
     try:
+        # Store FTP path if available, otherwise store local path
+        path_to_store = ftp_path if ftp_path else file_path
+        current_app.logger.info(f"Storing file path in database: {path_to_store} (FTP: {ftp_path is not None})")
+        
         cursor.execute(f"""
             EXEC {DBSCHEMA}.InsertFileData
-                @UserID = %s,
-                @ProcessID = %s,
-                @FileName = %s,
-                @FileType = %s, 
-                @MimeType = %s,
-                @FileSize = %s,
-                @FileFormat = %s,
-                @Description = %s,
-                @FilePath = %s
+                @UserID=%s,
+                @CreatedByName=%s,
+                @Bot_Id=%s,
+                @FileName=%s,
+                @FileType=%s,
+                @MimeType=%s,
+                @FileSize=%s,
+                @FileFormat=%s,
+                @Description=%s,
+                @FilePath=%s
         """, (
             user_id,
-            process_id,
+            user_name,
+            bot_id,
             filename,
             file_type,
             mime_type,
             file_size,
             file_format,
             description,
-            file_path
+            path_to_store
         ))
 
-        # ✅ Fetch output from SP (FileID + UploadedByName)
-        result = cursor.fetchone()
-        new_file_id = result[0] if result else None
-        uploaded_by_name = result[1] if result and len(result) > 1 else user_name
-
+        row = cursor.fetchone()
         conn.commit()
 
-        # Send email notification to Automation Engineers
+        # Notify Automation Engineers about the new file upload
         try:
-            send_file_upload_notification(
-                DBSCHEMA=DBSCHEMA,
+            # Use get_db_schema() (returns "ICAT" or "santova") instead of bot-specific schema (DBSCHEMA)
+            # because the GetAutomationEngineerEmails SP lives in the central schema
+            NOTIFICATION_SCHEMA = get_db_schema()
+            notify_automation_engineers_on_file_upload(
+                DBSCHEMA=NOTIFICATION_SCHEMA,
                 file_name=filename,
                 process_name=process_name,
-                uploaded_by=uploaded_by_name,
+                uploaded_by=user_name,
                 file_type=file_type,
                 file_size=file_size,
                 description=description
             )
-        except Exception as email_error:
-            # Log email error but don't fail the upload
-            current_app.logger.error(f"Failed to send email notification: {str(email_error)}")
-
-        response_message = "File uploaded successfully"
-        if ftp_upload_success:
-            response_message += " (FTP upload successful)"
-        elif ftp_manager:
-            response_message += f" (FTP upload failed: {ftp_message})"
+        except Exception as e:
+            current_app.logger.error(f"Failed to trigger email notification: {str(e)}")
 
         return jsonify({
             "success": True,
-            "message": response_message,
-            "NewFileID": new_file_id,
-            "UploadedByName": uploaded_by_name,
-            "ftp_uploaded": ftp_upload_success
+            "FileID": row[0],
+            "Status": row[1],
+            "UploadedBy": row[2]
         }), 201
 
     except Exception as e:
         conn.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
     finally:
         cursor.close()
         conn.close()
 
 
-def get_files_from_db(DBSCHEMA, process_id=None, file_type=None):
+@file_bp.route('/api/process/<int:bot_id>/file-management', methods=['GET'])
+@token_required
+def get_files_route(bot_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
-    Fetch all files from SP regardless of user.
-    Returns files with triggerStatus field from SP.
+    Get files for a specific bot/process.
+    Filtering handled in Stored Procedure.
     """
-    conn = connect_to_database()
-    cursor = conn.cursor()
     try:
-        # SQL Server SP call - SP now returns triggerStatus
-        sql = f"EXEC {DBSCHEMA}.GetFileData @ProcessID=%s, @UserID=%s, @FileType=%s"
-        cursor.execute(sql, (process_id, None, file_type if file_type and file_type != 'all' else None))
+        file_type = request.args.get('fileType')
+        status = request.args.get('status')
 
-        columns = [column[0] for column in cursor.description]
-        # Debug: Log column names to help identify date field
-        print(f"🔍 GetFileData columns: {columns}")
-        rows = cursor.fetchall()
+        # Normalize
+        file_type_param = file_type if file_type and file_type.lower() != "all" else None
+        status_param = status if status and status.lower() != "all" else None
+
+        DBSCHEMA = get_bot_schema()
+        use_db_connect = DBSCHEMA != "santova"
+
+        conn = db_connect() if use_db_connect else connect_to_database()
+        if not conn:
+            return jsonify({"success": False, "message": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        current_app.logger.info(
+            f"GetFileData | schema={DBSCHEMA}, bot_id={bot_id}, fileType={file_type_param}, status={status_param}"
+        )
+
+        cursor.execute(
+            f"EXEC {DBSCHEMA}.GetFileData @Bot_Id=%s, @FileType=%s, @Status=%s",
+            (bot_id, file_type_param, status_param)
+        )
+
+        columns = [c[0] for c in cursor.description]
         files = []
-        for row in rows:
-            file_dict = dict(zip(columns, row))
-            # Handle triggerStatus - convert to boolean for isTriggered
-            if 'triggerStatus' in file_dict:
-                file_dict['isTriggered'] = file_dict['triggerStatus'] == 'Triggered'
-                file_dict['IsTriggered'] = file_dict['isTriggered']
-            # Handle tags as list if present
-            if file_dict.get('tags'):
-                if isinstance(file_dict['tags'], str):
-                    file_dict['tags'] = [tag.strip() for tag in file_dict['tags'].split(',') if tag.strip()]
-            # CRITICAL: Convert datetime objects to ISO format strings with timezone
-            # This ensures consistent date/time handling across timezones
-            date_fields_found = {}
-            for key, value in file_dict.items():
-                if isinstance(value, datetime):
-                    # SQL Server GETDATE() returns server local time (naive datetime)
-                    # Preserve the exact time value by treating it as UTC
-                    # This ensures the time displayed matches what's stored in the database
-                    if value.tzinfo is None:
-                        # Naive datetime from SQL Server - treat as UTC to preserve exact time
-                        file_dict[key] = value.isoformat() + 'Z'
-                    else:
-                        # Already has timezone info
-                        file_dict[key] = value.isoformat()
-                    date_fields_found[key] = file_dict[key]
-                elif isinstance(value, str) and any(term in key.lower() for term in ['date', 'created', 'uploaded', 'time', 'at']):
-                    # Handle string dates - try to parse and convert to ISO format
-                    # This handles cases where SQL Server returns dates as strings
-                    try:
-                        # Try to parse common SQL Server date formats
-                        if value and value.strip():
-                            # Check if it's already in ISO format
-                            if 'T' in value or value.count('-') >= 2:
-                                # Might be ISO or SQL Server format, ensure it has Z suffix
-                                if not value.endswith('Z') and not ('+' in value or value.count(':') > 2):
-                                    # Try to parse and reformat
-                                    try:
-                                        parsed_date = datetime.fromisoformat(value.replace('Z', '+00:00')) if 'Z' in value else datetime.fromisoformat(value)
-                                        file_dict[key] = parsed_date.isoformat() + 'Z' if parsed_date.tzinfo is None else parsed_date.isoformat()
-                                        date_fields_found[key] = file_dict[key]
-                                    except:
-                                        # If parsing fails, keep original but log
-                                        if len(files) == 0:
-                                            print(f"⚠️ Could not parse string date field {key}: {value}")
-                            else:
-                                # SQL Server datetime format like '2025-12-11 03:33:53.843' or '2024-01-01 12:00:00'
-                                try:
-                                    # Handle SQL Server datetime format with optional milliseconds
-                                    # Format: YYYY-MM-DD HH:MM:SS[.mmm...]
-                                    # Match SQL Server datetime format: YYYY-MM-DD HH:MM:SS.mmm or YYYY-MM-DD HH:MM:SS
-                                    sql_datetime_pattern = r'^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\.(\d+))?$'
-                                    match = re.match(sql_datetime_pattern, value.strip())
-                                    if match:
-                                        date_part = match.group(1)
-                                        time_part = match.group(2)
-                                        milliseconds = match.group(3) or '0'
-                                        # Pad milliseconds to 6 digits for microseconds (Python datetime requirement)
-                                        # SQL Server can return 1-7 digits, we need exactly 6 for microseconds
-                                        milliseconds = milliseconds.ljust(6, '0')[:6]
-                                        # Parse as: YYYY-MM-DDTHH:MM:SS.microseconds
-                                        datetime_str = f"{date_part}T{time_part}.{milliseconds}"
-                                        parsed_date = datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%f')
-                                        # Convert to ISO format with Z suffix
-                                        # Treating server time as UTC to preserve exact time value from database
-                                        # GETDATE() returns server local time, but we preserve it as-is
-                                        file_dict[key] = parsed_date.isoformat() + 'Z'
-                                        date_fields_found[key] = file_dict[key]
-                                        if len(files) == 0:
-                                            print(f"✅ Parsed SQL Server datetime: {value} -> {file_dict[key]}")
-                                    else:
-                                        # Fallback to standard formats (without milliseconds)
-                                        for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S']:
-                                            try:
-                                                parsed_date = datetime.strptime(value, fmt)
-                                                file_dict[key] = parsed_date.isoformat() + 'Z'
-                                                date_fields_found[key] = file_dict[key]
-                                                if len(files) == 0:
-                                                    print(f"✅ Parsed datetime (fallback): {value} -> {file_dict[key]}")
-                                                break
-                                            except:
-                                                continue
-                                except Exception as parse_error:
-                                    if len(files) == 0:
-                                        print(f"⚠️ Error parsing SQL Server datetime '{value}': {parse_error}")
-                                    pass
-                    except Exception as e:
-                        if len(files) == 0:
-                            print(f"⚠️ Error processing string date field {key}: {e}")
-            
-            # Debug: Log ALL fields for first file to help identify date field
-            if len(files) == 0:
-                print(f"🔍 Sample file ALL fields: {file_dict}")
-                print(f"🔍 Sample file ALL keys: {list(file_dict.keys())}")
-                if date_fields_found:
-                    print(f"🔍 Sample file date fields: {date_fields_found}")
-                else:
-                    # Check for date-like values that might not be datetime objects
-                    date_like_fields = {k: v for k, v in file_dict.items() if any(term in k.lower() for term in ['date', 'created', 'uploaded', 'time', 'at'])}
-                    if date_like_fields:
-                        print(f"🔍 Sample file date-like fields (non-datetime): {date_like_fields}")
-                    else:
-                        print(f"⚠️ No date-like fields found in file data!")
-                        print(f"⚠️ All available keys: {list(file_dict.keys())}")
-            
-            # Ensure at least one date field exists - use CreatedDate or UploadedDate if available
-            # This helps frontend find the date even if field names vary
-            if not any(k.lower() in ['uploadedat', 'uploaded_at', 'uploadeddate', 'createdat', 'created_at', 'createddate'] for k in file_dict.keys()):
-                # Try to find any date field and map it to uploadedAt for frontend
-                for key in file_dict.keys():
-                    if any(term in key.lower() for term in ['date', 'created', 'uploaded', 'time']):
-                        file_dict['uploadedAt'] = file_dict[key]
-                        file_dict['UploadedAt'] = file_dict[key]
-                        file_dict['UploadedDate'] = file_dict[key]
-                        if len(files) == 0:
-                            print(f"✅ Mapped date field '{key}' to uploadedAt/UploadedAt/UploadedDate")
-                        break
-            
-            files.append(file_dict)
 
-        return files
+        for row in cursor.fetchall():
+            data = dict(zip(columns, row))
+            for k, v in data.items():
+                if isinstance(v, datetime):
+                    data[k] = v.isoformat() + "Z"
+            files.append(data)
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "files": files
+        }), 200
 
     except Exception as e:
-        print("Error fetching files from DB:", e)
-        raise e
+        current_app.logger.error(str(e))
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({"success": False, "message": str(e)}), 500
+        
 
-    finally:
-        cursor.close()
-        conn.close()
-
-
-
-def delete_file(DBSCHEMA, file_id: int, user_id: int):
+@file_bp.route("/api/delete-uploaded-file", methods=["POST"])
+@token_required
+def delete_file_route():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
-    Soft delete a file by setting IsDeleted = 1.
+    Delete uploaded file (soft delete).
+    Only owner can delete.
+    Uses appropriate database connection and schema based on the request origin.
     Also deletes from FTP server if configured.
-    Only the owner can delete.
-    Returns (success: bool, message: str)
+    """
+    data = request.get_json()
+    
+    # Determine which schema to use for the stored procedure
+    # get_bot_schema() returns "AirlineProcessHeaderDetail" for ICAT/localhost, "santova" for santova URL
+    DBSCHEMA = get_bot_schema()
+
+    file_id = data.get("FileID")
+
+    if not file_id:
+        return jsonify({
+            "Success": False,
+            "Message": "FileID is required"
+        }), 400
+
+    try:
+        file_id = int(file_id)
+    except ValueError:
+        return jsonify({
+            "Success": False,
+            "Message": "FileID must be numeric"
+        }), 400
+
+    success, message = delete_file(DBSCHEMA, file_id, user_id)
+
+    status_code = 200 if success else 403
+
+    return jsonify({
+        "Success": success,
+        "Message": message
+    }), status_code
+
+
+def delete_file(DBSCHEMA: str, file_id: int, user_id: int):
+    """
+    Calls DeleteUploadedData SP.
+    SP handles:
+    - ownership check
+    - soft delete
+    - response message
+    Also deletes from FTP server if file was successfully deleted from DB.
     """
     conn = None
     cursor = None
+
     try:
-        conn = connect_to_database()
+        # Determine which database connection to use
+        # If schema is "santova", use connect_to_database() (DB_A4EFFD_Hybridwf)
+        # Otherwise (AirlineProcessHeaderDetail), use db_connect() (db_Icat)
+        use_db_connect = DBSCHEMA != "santova"
+        
+        if use_db_connect:
+            # For AirlineProcessHeaderDetail schema: use db_connect() (db_Icat database)
+            conn = db_connect()
+            table_path = f"{DBSCHEMA}.FileManagement"
+            # Query Bot_Id for AirlineProcessHeaderDetail schema
+            file_info_query = f"""
+                SELECT FileName, FilePath, BotId
+                FROM {table_path}
+                WHERE FileID = %s AND IsDeleted = 0
+            """
+        else:
+            # For santova schema: use connect_to_database() (DB_A4EFFD_Hybridwf database)
+            conn = connect_to_database()
+            table_path = f"DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement"
+            # Query ProcessID for santova schema
+            file_info_query = f"""
+                SELECT FileName, FilePath, ProcessID
+                FROM {table_path}
+                WHERE FileID = %s AND IsDeleted = 0
+            """
+        
+        if not conn:
+            return False, "Database connection failed"
+        
         cursor = conn.cursor()
 
         # First, get file info for FTP deletion
-        cursor.execute(f"""
-            SELECT FileName, FilePath, ProcessID
-            FROM DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement
-            WHERE FileID = %s AND IsDeleted = 0
-        """, (file_id,))
+        cursor.execute(file_info_query, (file_id,))
         file_info = cursor.fetchone()
 
         # Execute the SP
@@ -407,42 +432,71 @@ def delete_file(DBSCHEMA, file_id: int, user_id: int):
             (file_id, user_id)
         )
 
-        # Fetch the SP result
-        row = cursor.fetchone()
+        result = cursor.fetchone()
         conn.commit()
 
-        if row:
-            success = row[0] == 1
-            message = row[1] if len(row) > 1 else "No message returned"
-            
-            # Delete from FTP server if file was successfully deleted from DB (use schema-specific credentials and paths)
-            if success and file_info:
-                ftp_manager = get_ftp_manager(DBSCHEMA)
-                if ftp_manager:
-                    try:
-                        file_name, file_path, process_id = file_info
-                        process_name = get_process_name(DBSCHEMA, process_id)
-                        ftp_process_name = sanitize_folder_name(process_name)
+        if not result:
+            return False, "No response from database"
+
+        success = result[0] == 1
+        message = result[1]
+        
+        # Delete from FTP server if file was successfully deleted from DB
+        if success and file_info:
+            # For FTP credentials: use get_db_schema() to get "ICAT" or "santova"
+            FTP_SCHEMA = get_db_schema()  # Returns "ICAT" for ICAT URL/localhost, "santova" for santova URL
+            ftp_manager = get_ftp_manager(FTP_SCHEMA)
+            if ftp_manager:
+                try:
+                    file_name, file_path, process_or_bot_id = file_info
+                    
+                    # Get process name based on schema
+                    process_name = None
+                    if use_db_connect:
+                        # For AirlineProcessHeaderDetail schema: get name from Bots table
+                        if process_or_bot_id:
+                            try:
+                                bot_conn = db_connect()
+                                if bot_conn:
+                                    bot_cursor = bot_conn.cursor()
+                                    bot_cursor.execute(f"""
+                                        SELECT Name 
+                                        FROM {DBSCHEMA}.Bots 
+                                        WHERE Bot_Id = %s AND IsDeleted = 0
+                                    """, (process_or_bot_id,))
+                                    bot_result = bot_cursor.fetchone()
+                                    if bot_result and bot_result[0]:
+                                        process_name = sanitize_folder_name(bot_result[0])
+                                    bot_cursor.close()
+                                    bot_conn.close()
+                            except Exception as e:
+                                current_app.logger.error(f"Error fetching bot name for Bot_Id={process_or_bot_id}: {str(e)}")
                         
-                        # FTP structure uses process name directly (schema only determines which FTP credentials to use)
-                        remote_file_path = f"/{ftp_process_name}/{file_name}"
-                        
-                        ftp_success, ftp_msg = ftp_manager.delete_file(remote_file_path)
-                        if ftp_success:
-                            current_app.logger.info(f"File deleted from FTP: {remote_file_path}")
-                        else:
-                            current_app.logger.warning(f"FTP delete failed: {ftp_msg}")
-                    except Exception as ftp_error:
-                        current_app.logger.error(f"FTP delete error: {str(ftp_error)}")
-            
-            current_app.logger.info(f"DeleteFile SP response: {row}")
-            return success, message
-        else:
-            current_app.logger.warning(f"No response from DeleteUploadedData for FileID={file_id}")
-            return False, "Delete failed: no response from database"
+                        if not process_name:
+                            process_name = f"Bot_{process_or_bot_id}" if process_or_bot_id else "Unassigned"
+                    else:
+                        # For santova schema: use get_process_name function
+                        process_name = get_process_name(DBSCHEMA, process_or_bot_id)
+                    
+                    ftp_process_name = sanitize_folder_name(process_name)
+                    
+                    # FTP structure uses process name directly (schema only determines which FTP credentials to use)
+                    remote_file_path = f"/{ftp_process_name}/{file_name}"
+                    
+                    ftp_success, ftp_msg = ftp_manager.delete_file(remote_file_path)
+                    if ftp_success:
+                        current_app.logger.info(f"File deleted from FTP: {remote_file_path}")
+                    else:
+                        current_app.logger.warning(f"FTP delete failed: {ftp_msg}")
+                except Exception as ftp_error:
+                    current_app.logger.error(f"FTP delete error: {str(ftp_error)}")
+
+        return success, message
 
     except Exception as e:
         current_app.logger.error(f"Error deleting file {file_id}: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
         return False, f"Delete failed: {str(e)}"
 
     finally:
@@ -452,141 +506,102 @@ def delete_file(DBSCHEMA, file_id: int, user_id: int):
             conn.close()
 
 
-
-# 🌐 ROUTES (JWT-Protected)
-
-@file_bp.route('/api/uploaded-details', methods=['GET'])
-@token_required  # ✅ Protect this route too
-def get_files_route(user_id, user_name):
-    """
-    Fetch all files based on optional filters.
-    Now returns triggerStatus from SP.
-    """
-    process_id_str = request.args.get('processId')
-    file_type = request.args.get('fileType', 'all')
-    folder_structure = request.args.get('folderStructure', 'false').lower() == 'true'
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
-    process_id = int(process_id_str) if process_id_str else None
-
-    try:
-        files = get_files_from_db(DBSCHEMA, process_id, file_type)
-
-        # If folder structure is requested, organize files by process name
-        if folder_structure:
-            folder_structure_data = organize_files_by_process(DBSCHEMA, files)
-            return jsonify({
-                'success': True,
-                'folderStructure': folder_structure_data,
-                'files': files
-            })
-        else:
-            return jsonify({
-                'success': True,
-                'files': files
-            })
-
-    except ValueError:
-        return jsonify({'success': False, 'message': 'Invalid ProcessID format'}), 400
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-
-def organize_files_by_process(DBSCHEMA, files):
-    """
-    Organizes files into a folder structure based on process names.
-    Returns a dictionary with process names as keys and their files as values.
-    """
-    folder_structure = {}
-    
-    for file_item in files:
-        process_id = file_item.get('ProcessID') or file_item.get('processId')
-        process_name = get_process_name(DBSCHEMA, process_id)
-        
-        if process_name not in folder_structure:
-            folder_structure[process_name] = {
-                'processName': process_name,
-                'processId': process_id,
-                'files': []
-            }
-        
-        folder_structure[process_name]['files'].append(file_item)
-    
-    # Convert to list format for easier frontend consumption
-    return list(folder_structure.values())
-
-
-
-
-@file_bp.route("/api/delete-uploaded-file", methods=["POST"])
-@token_required
-def delete_file_route(user_id, user_name):
-    """
-    Deletes a file. Only owner can delete.
-    Returns proper HTTP status codes.
-    """
-    data = request.json
-    file_id = data.get("FileID")
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
-    if not file_id:
-        current_app.logger.warning("Delete request missing FileID")
-        return jsonify({"Success": False, "Message": "FileID is required"}), 400
-
-    # Ensure numeric
-    try:
-        file_id = int(file_id)
-    except ValueError:
-        return jsonify({"Success": False, "Message": "FileID must be numeric"}), 400
-
-    success, message = delete_file(DBSCHEMA, file_id, user_id)
-
-    # Return proper HTTP status based on success
-    status_code = 200 if success else 403  # 403 Forbidden if not allowed
-    current_app.logger.info(f"Delete request for FileID={file_id} by UserID={user_id} => {message}")
-    return jsonify({"Success": success, "Message": message}), status_code
-
 # download uploaded files
 
 @file_bp.route("/api/download-file/<int:file_id>", methods=["GET"])
 @token_required
-def download_file_route(user_id, user_name, file_id):
+def download_file_route(file_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Downloads a file from the uploads folder based on DB record.
     If local file doesn't exist, tries to download from FTP server.
-    Uses full table path: DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement
+    Uses appropriate database connection and schema based on the request origin.
     """
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
-    conn = connect_to_database()
-    cursor = conn.cursor()
     try:
-        # Use full table path matching the SP definition
-        cursor.execute(f"""
-            SELECT FileName, FileFormat, FilePath, ProcessID
-            FROM DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement
-            WHERE FileID = %s AND IsDeleted = 0
-        """, (file_id,))
+        # Determine which schema and database connection to use
+        # get_bot_schema() returns "AirlineProcessHeaderDetail" for ICAT/localhost, "santova" for santova URL
+        DBSCHEMA = get_bot_schema()
+        
+        # If schema is "santova", use connect_to_database() (DB_A4EFFD_Hybridwf)
+        # Otherwise (AirlineProcessHeaderDetail), use db_connect() (db_Icat)
+        use_db_connect = DBSCHEMA != "santova"
+        
+        if use_db_connect:
+            # For AirlineProcessHeaderDetail schema: use db_connect() (db_Icat database)
+            conn = db_connect()
+            # For AirlineProcessHeaderDetail schema, table is in db_Icat database
+            table_path = f"{DBSCHEMA}.FileManagement"
+            # Query Bot_Id instead of ProcessID for AirlineProcessHeaderDetail schema
+            select_query = f"""
+                SELECT FileName, FileFormat, FilePath, BotId
+                FROM {table_path}
+                WHERE FileID = %s AND IsDeleted = 0
+            """
+        else:
+            # For santova schema: use connect_to_database() (DB_A4EFFD_Hybridwf database)
+            conn = connect_to_database()
+            # For santova schema, table is in DB_A4EFFD_Hybridwf database
+            table_path = f"DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement"
+            # Query ProcessID for santova schema
+            select_query = f"""
+                SELECT FileName, FileFormat, FilePath, ProcessID
+                FROM {table_path}
+                WHERE FileID = %s AND IsDeleted = 0
+            """
+        
+        if not conn:
+            return jsonify({"success": False, "message": "Database connection failed"}), 500
+        
+        cursor = conn.cursor()
+        
+        # Query file information
+        cursor.execute(select_query, (file_id,))
         file_row = cursor.fetchone()
 
         if not file_row:
+            cursor.close()
+            conn.close()
             return jsonify({"success": False, "message": "File not found"}), 404
 
-        file_name, file_format, file_path, process_id = file_row
+        file_name, file_format, file_path, process_or_bot_id = file_row
 
         # Check if local file exists
         if not os.path.exists(file_path):
             # Try to download from FTP server (use schema-specific credentials and paths)
-            ftp_manager = get_ftp_manager(DBSCHEMA)
+            # For FTP credentials: use get_db_schema() to get "ICAT" or "santova"
+            FTP_SCHEMA = get_db_schema()  # Returns "ICAT" for ICAT URL/localhost, "santova" for santova URL
+            ftp_manager = get_ftp_manager(FTP_SCHEMA)
             if ftp_manager:
                 try:
-                    process_name = get_process_name(DBSCHEMA, process_id)
+                    # Get process name based on schema
+                    process_name = None
+                    if use_db_connect:
+                        # For AirlineProcessHeaderDetail schema: get name from Bots table
+                        if process_or_bot_id:
+                            try:
+                                bot_conn = db_connect()
+                                if bot_conn:
+                                    bot_cursor = bot_conn.cursor()
+                                    bot_cursor.execute(f"""
+                                        SELECT Name 
+                                        FROM {DBSCHEMA}.Bots 
+                                        WHERE Bot_Id = %s AND IsDeleted = 0
+                                    """, (process_or_bot_id,))
+                                    bot_result = bot_cursor.fetchone()
+                                    if bot_result and bot_result[0]:
+                                        process_name = sanitize_folder_name(bot_result[0])
+                                    bot_cursor.close()
+                                    bot_conn.close()
+                            except Exception as e:
+                                current_app.logger.error(f"Error fetching bot name for Bot_Id={process_or_bot_id}: {str(e)}")
+                        
+                        if not process_name:
+                            process_name = f"Bot_{process_or_bot_id}" if process_or_bot_id else "Unassigned"
+                    else:
+                        # For santova schema: use get_process_name function
+                        process_name = get_process_name(DBSCHEMA, process_or_bot_id)
+                    
                     ftp_process_name = sanitize_folder_name(process_name)
                     
                     # FTP structure uses process name directly (schema only determines which FTP credentials to use)
@@ -604,6 +619,8 @@ def download_file_route(user_id, user_name, file_id):
                     )
                     
                     if not ftp_success:
+                        cursor.close()
+                        conn.close()
                         return jsonify({
                             "success": False,
                             "message": f"File missing from server and FTP download failed: {ftp_msg}"
@@ -612,20 +629,27 @@ def download_file_route(user_id, user_name, file_id):
                     current_app.logger.info(f"File downloaded from FTP: {remote_file_path}")
                 except Exception as ftp_error:
                     current_app.logger.error(f"FTP download error: {str(ftp_error)}")
+                    cursor.close()
+                    conn.close()
                     return jsonify({
                         "success": False,
                         "message": f"File missing from server and FTP download failed: {str(ftp_error)}"
                     }), 404
             else:
+                cursor.close()
+                conn.close()
                 return jsonify({"success": False, "message": "File missing from server"}), 404
 
-        # Update download count using full table path
+        # Update download count
         cursor.execute(f"""
-            UPDATE DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement
+            UPDATE {table_path}
             SET DownloadCount = ISNULL(DownloadCount, 0) + 1
             WHERE FileID = %s
         """, (file_id,))
         conn.commit()
+
+        cursor.close()
+        conn.close()
 
         return send_file(
             file_path,
@@ -635,44 +659,154 @@ def download_file_route(user_id, user_name, file_id):
         )
 
     except Exception as e:
-        conn.rollback()
+        current_app.logger.error(f"Error downloading file {file_id}: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
+def call_uipath_api_background(app, file_id, file_name):
+    """Safely call UiPath Orchestrator API inside Flask app context."""
+    with app.app_context():
+        try:
+            uipath_url = app.config.get("UIPATH_ORCHESTRATOR_URL")
+            uipath_token = app.config.get("UIPATH_ORCHESTRATOR_TOKEN")
+
+            if not uipath_url or not uipath_token:
+                app.logger.warning("UiPath config missing. Skipping Orchestrator call.")
+                return
+
+            headers = {
+                "Authorization": f"Bearer {uipath_token}",
+                "Content-Type": "application/json"
+            }
+
+            payload = {
+                "fileId": file_id,
+                "fileName": file_name
+            }
+
+            app.logger.info(f"[UiPath] Triggering job for file_id={file_id}")
+
+            response = requests.post(
+                uipath_url,
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+
+            if response.status_code in (200, 202):
+                app.logger.info(f"[UiPath] Success for file_id={file_id}")
+            else:
+                app.logger.warning(
+                    f"[UiPath] Failed | file_id={file_id} | "
+                    f"Status={response.status_code} | Response={response.text[:300]}"
+                )
+
+        except requests.exceptions.Timeout:
+            app.logger.error(f"[UiPath] Timeout for file_id={file_id}")
+        except requests.exceptions.ConnectionError:
+            app.logger.error(f"[UiPath] Connection error for file_id={file_id}")
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"[UiPath] Request error for file_id={file_id}: {str(e)}")
+        except Exception as e:
+            import traceback
+            app.logger.error(f"[UiPath] Unexpected error for file_id={file_id}: {str(e)}")
+            app.logger.error(traceback.format_exc())
 
 
-@file_bp.route("/api/trigger-file/<int:file_id>", methods=["POST"])
+
+@file_bp.route("/api/process/<int:bot_id>/trigger-file/<int:file_id>", methods=["POST"])
 @token_required
-def trigger_file_route(user_id, user_name, file_id):
+def trigger_file_route(bot_id, file_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Triggers a file by setting [Trigger] = 1 in the database.
+    Uses appropriate database connection and schema based on the request origin.
+    Validates that the file belongs to the specified bot_id.
     """
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
-    conn = connect_to_database()
-    cursor = conn.cursor()
     try:
-        # Check if file exists and is not deleted
-        cursor.execute(f"""
-            SELECT FileID, [Trigger]
-            FROM DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement
-            WHERE FileID = %s AND IsDeleted = 0
-        """, (file_id,))
+        # Determine which schema and database connection to use
+        # get_bot_schema() returns "AirlineProcessHeaderDetail" for ICAT/localhost, "santova" for santova URL
+        DBSCHEMA = get_bot_schema()
+        
+        # If schema is "santova", use connect_to_database() (DB_A4EFFD_Hybridwf)
+        # Otherwise (AirlineProcessHeaderDetail), use db_connect() (db_Icat)
+        use_db_connect = DBSCHEMA != "santova"
+        
+        if use_db_connect:
+            # For AirlineProcessHeaderDetail schema: use db_connect() (db_Icat database)
+            conn = db_connect()
+            # For AirlineProcessHeaderDetail schema, table is in db_Icat database
+            table_path = f"{DBSCHEMA}.FileManagement"
+        else:
+            # For santova schema: use connect_to_database() (DB_A4EFFD_Hybridwf database)
+            conn = connect_to_database()
+            # For santova schema, table is in DB_A4EFFD_Hybridwf database
+            table_path = f"DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement"
+        
+        if not conn:
+            return jsonify({"success": False, "message": "Database connection failed"}), 500
+        
+        cursor = conn.cursor()
+        
+        # Check if file exists and is not deleted, also get file name and bot_id/process_id for validation
+        if use_db_connect:
+            # For AirlineProcessHeaderDetail schema: query BotId (column name without underscore)
+            select_query = f"""
+                SELECT FileID, [Trigger], FileName, BotId
+                FROM {table_path}
+                WHERE FileID = %s AND IsDeleted = 0
+            """
+        else:
+            # For santova schema: query ProcessID
+            select_query = f"""
+                SELECT FileID, [Trigger], FileName, ProcessID
+                FROM {table_path}
+                WHERE FileID = %s AND IsDeleted = 0
+            """
+        
+        cursor.execute(select_query, (file_id,))
         file_row = cursor.fetchone()
 
         if not file_row:
+            cursor.close()
+            conn.close()
             return jsonify({"success": False, "message": "File not found"}), 404
+        
+        # Validate that the file belongs to the specified bot_id
+        file_bot_id = file_row[3] if len(file_row) > 3 else None
+        if file_bot_id and int(file_bot_id) != int(bot_id):
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": f"File does not belong to bot_id {bot_id}. File belongs to bot_id {file_bot_id}"
+            }), 400
 
         # Update trigger status to 1
         cursor.execute(f"""
-            UPDATE DB_A4EFFD_Hybridwf.{DBSCHEMA}.FileManagement
+            UPDATE {table_path}
             SET [Trigger] = 1
             WHERE FileID = %s AND IsDeleted = 0
         """, (file_id,))
         conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        try:
+            app = current_app._get_current_object()
+            file_name = file_row[2] if len(file_row) > 2 else None
+
+            threading.Thread(
+                target=call_uipath_api_background,
+                args=(app, file_id, file_name),
+                daemon=True
+            ).start()
+
+        except Exception as thread_error:
+            current_app.logger.error(f"Failed to start UiPath background thread: {str(thread_error)}")
 
         return jsonify({
             "success": True,
@@ -680,10 +814,8 @@ def trigger_file_route(user_id, user_name, file_id):
         }), 200
 
     except Exception as e:
-        conn.rollback()
         current_app.logger.error(f"Error triggering file {file_id}: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
 

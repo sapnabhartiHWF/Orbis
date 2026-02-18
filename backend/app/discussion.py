@@ -52,16 +52,16 @@ def insert_comment(DBSCHEMA, user_id, comment_text, parent_id=None, mentioned_us
 
 @discussion_bp.route("/api/add-comment", methods=["POST"])
 @token_required  # ✅ secure with JWT
-def add_comment(user_id, user_name):
+def add_comment():
+    user_id = request.user.get("UserId")
+    user_name = request.user.get("UserName")
     """
     Add a new comment (supports mentions and replies).
     JWT provides user_id and user_name.
     """
     data = request.json
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
     print("💡 Incoming payload:", data)
     comment_text = data.get("CommentText")
     parent_id = data.get("ParentID")
@@ -138,17 +138,14 @@ def get_comments_with_reacts(DBSCHEMA):
         cursor.close()
         conn.close()
 
-
-
-
 @discussion_bp.route("/api/get-comments", methods=["GET"])
 @token_required
-def get_comments_route(user_id, user_name):
+def get_comments_route():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     try:
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
         data = get_comments_with_reacts(DBSCHEMA)
         return jsonify({"success": True, "data": data})
     except Exception as e:
@@ -157,6 +154,36 @@ def get_comments_route(user_id, user_name):
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+def get_total_comment_count(DBSCHEMA):
+    """
+    Get the total count of comments in the discussion table.
+    """
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"SELECT COUNT(*) FROM {DBSCHEMA}.Discussion")
+        result = cursor.fetchone()
+        return result[0] if result else 0
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@discussion_bp.route("/api/get-comment-count", methods=["GET"])
+@token_required
+def get_comment_count_route():
+    """
+    API to get the total number of comments/messages.
+    Returns: {"success": true, "count": 42}
+    """
+    try:
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
+        count = get_total_comment_count(DBSCHEMA)
+        return jsonify({"success": True, "count": count})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # Get All React List
 def get_all_emojis(DBSCHEMA):
@@ -177,14 +204,14 @@ def get_all_emojis(DBSCHEMA):
 
 @discussion_bp.route("/api/get-all-reacts", methods=["GET"])
 @token_required
-def get_all_reacts_route(user_id, user_name):
+def get_all_reacts_route():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     API to get the list of all emojis (React list)
     """
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
     data = get_all_emojis(DBSCHEMA)
     return jsonify({"success": True, "data": data})
 
@@ -218,17 +245,17 @@ def insert_reaction(DBSCHEMA, comment_id, user_id, r_id):
 # insert mapped reaction count per count
 @discussion_bp.route("/api/react-comment", methods=["POST"])
 @token_required
-def react_comment_route(user_id, user_name):
+def react_comment_route():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Body JSON: { "CommentID": 1, "R_Id": 2 }
     """
     data = request.json
     comment_id = data.get("CommentID")
     r_id = data.get("R_Id")
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
     if not comment_id or not r_id:
         return jsonify({"success": False, "message": "CommentID and R_Id are required"}), 400
 
@@ -275,7 +302,9 @@ def delete_reaction(DBSCHEMA, comment_id, user_id, r_id):
 
 @discussion_bp.route("/api/delete-reaction", methods=["POST"])
 @token_required
-def delete_reaction_route(user_id, user_name):
+def delete_reaction_route():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Deletes a specific emoji reaction made by the logged-in user.
     Body JSON: { "CommentID": 1, "R_Id": 2 }
@@ -284,10 +313,8 @@ def delete_reaction_route(user_id, user_name):
     comment_id = data.get("CommentID")
     user_id = data.get("UserID")
     r_id = data.get("R_Id")
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova"
-    if host == "https://orbis-icat.alphalogix.tech":
-        DBSCHEMA = "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
     if not comment_id or not r_id:
         return jsonify({"success": False, "message": "CommentID and R_Id are required"}), 400
 

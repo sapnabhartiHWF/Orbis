@@ -5,6 +5,8 @@ from app.file_management.ftp_utils import get_ftp_manager
 from datetime import datetime, timezone
 import os
 from werkzeug.utils import secure_filename
+import concurrent.futures
+import threading
 
 process_registration_bp = Blueprint('process_registration_bp', __name__)
 
@@ -1294,12 +1296,45 @@ def get_next_stage(user_id, user_name, process_id):
             conn.close()
 
 
+def _execute_stored_procedure(DBSCHEMA, sp_name, process_id, conn=None):
+    """
+    Helper function to execute a stored procedure in a separate connection.
+    Used for parallel execution of stored procedures.
+    """
+    local_conn = None
+    try:
+        if conn is None:
+            local_conn = connect_to_database()
+            if not local_conn:
+                return None
+            conn = local_conn
+        
+        cursor = conn.cursor()
+        cursor.execute(
+            f"EXEC {DBSCHEMA}.{sp_name} @ProcessId = %s",
+            (process_id,)
+        )
+        result = cursor.fetchall()
+        columns = [column[0] for column in cursor.description] if cursor.description else []
+        cursor.close()
+        
+        if result:
+            data = dict(zip(columns, result[0]))
+            return format_datetime_for_json(data)
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Error executing {sp_name}: {str(e)}")
+        return None
+    finally:
+        if local_conn:
+            local_conn.close()
+
 @process_registration_bp.route('/api/get-all-process-stages-detail/<int:process_id>', methods=['GET'])
 @token_required
 def get_process_registration_detail(user_id, user_name, process_id):
     """
     Get detailed process registration data with all stages.
-    Calls separate stored procedures for each stage.
+    OPTIMIZED: Uses parallel execution of stored procedures for better performance.
     Returns complete data including all stage information.
     """
     conn = None
@@ -1308,10 +1343,14 @@ def get_process_registration_detail(user_id, user_name, process_id):
     try:
         DBSCHEMA = get_db_schema()
         
+        # Get main connection for process registration (required first)
         conn = connect_to_database()
+        if not conn:
+            return jsonify({"success": False, "message": "Database connection failed"}), 500
+        
         cursor = conn.cursor()
         
-        # 1. Get main process registration data
+        # 1. Get main process registration data (required first to check if process exists)
         cursor.execute(
             f"EXEC {DBSCHEMA}.GetProcessRegistrationById @ProcessId = %s",
             (process_id,)
@@ -1322,150 +1361,94 @@ def get_process_registration_detail(user_id, user_name, process_id):
         
         columns = [column[0] for column in cursor.description]
         process_dict = dict(zip(columns, process_result[0]))
-        # Convert datetime objects to ISO format strings
         process_dict = format_datetime_for_json(process_dict)
+        cursor.close()
         
-        # 2. Get Initial Triage data
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.GetInitialTriageByProcessId @ProcessId = %s",
-            (process_id,)
-        )
-        triage_result = cursor.fetchall()
-        triage_data = None
-        if triage_result:
-            triage_columns = [column[0] for column in cursor.description]
-            triage_data = dict(zip(triage_columns, triage_result[0]))
-            # Convert datetime objects to ISO format strings
-            triage_data = format_datetime_for_json(triage_data)
-            # Debug: Log triage data to help diagnose frontend mapping issues
+        # 2-6. Execute all stage stored procedures in parallel for better performance
+        stage_procedures = {
+            'initialTriage': 'GetInitialTriageByProcessId',
+            'systemIntegration': 'GetSystemIntegrationByProcessId',
+            'toBeDesign': 'GetToBeDesignByProcessId',
+            'approval': 'GetApprovalStageByProcessId',
+            'development': 'GetDevelopmentByProcessId'
+        }
         
-        # 3. Get System Integration data
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.GetSystemIntegrationByProcessId @ProcessId = %s",
-            (process_id,)
-        )
-        integration_result = cursor.fetchall()
-        integration_data = None
-        if integration_result:
-            integration_columns = [column[0] for column in cursor.description]
-            integration_data = dict(zip(integration_columns, integration_result[0]))
-            # Convert datetime objects to ISO format strings
-            integration_data = format_datetime_for_json(integration_data)
-            # Debug: Log integration data to help diagnose frontend mapping issues
+        stages_data = {}
         
-        # 4. Get To-Be Design data
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.GetToBeDesignByProcessId @ProcessId = %s",
-            (process_id,)
-        )
-        design_result = cursor.fetchall()
-        design_data = None
-        if design_result:
-            design_columns = [column[0] for column in cursor.description]
-            design_data = dict(zip(design_columns, design_result[0]))
-            # Convert datetime objects to ISO format strings
-            design_data = format_datetime_for_json(design_data)
-            # Debug: Log actual column names returned by stored procedure
-        
-        # 5. Get Approval Stage data
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.GetApprovalStageByProcessId @ProcessId = %s",
-            (process_id,)
-        )
-        approval_result = cursor.fetchall()
-        approval_data = None
-        if approval_result:
-            approval_columns = [column[0] for column in cursor.description]
-            approval_data = dict(zip(approval_columns, approval_result[0]))
-            # Convert datetime objects to ISO format strings
-            approval_data = format_datetime_for_json(approval_data)
+        # Use ThreadPoolExecutor to execute stored procedures in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            # Submit all stored procedure calls
+            future_to_stage = {
+                executor.submit(_execute_stored_procedure, DBSCHEMA, sp_name, process_id): stage_key
+                for stage_key, sp_name in stage_procedures.items()
+            }
             
-            # Debug: Log approval data to help diagnose frontend mapping issues
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_stage):
+                stage_key = future_to_stage[future]
+                try:
+                    stages_data[stage_key] = future.result()
+                except Exception as e:
+                    current_app.logger.error(f"Error fetching {stage_key}: {str(e)}")
+                    stages_data[stage_key] = None
         
-        # 6. Get Development Stage data
-        cursor.execute(
-            f"EXEC {DBSCHEMA}.GetDevelopmentByProcessId @ProcessId = %s",
-            (process_id,)
-        )
-        development_result = cursor.fetchall()
-        development_data = None
-        if development_result:
-            development_columns = [column[0] for column in cursor.description]
-            development_data = dict(zip(development_columns, development_result[0]))
-            # Convert datetime objects to ISO format strings
-            development_data = format_datetime_for_json(development_data)
-        
-        # 7. Get the current incomplete stage from StageTracking
-        # Find the most recent stage that is NOT completed (Status != 'Completed' or Status IS NULL)
+        # 7. Get the current incomplete stage from StageTracking (optimized single query)
+        cursor = conn.cursor()
         cursor.execute(
             f"""
-            SELECT TOP 1 stage_name, Status
-            FROM {DBSCHEMA}.StageTracking 
-            WHERE process_id = %s 
-            AND (Status IS NULL OR Status != 'Completed')
-            ORDER BY ST_id DESC
+            SELECT TOP 1 
+                st.stage_name,
+                st.Status,
+                sm.NextStageName
+            FROM {DBSCHEMA}.StageTracking st
+            LEFT JOIN {DBSCHEMA}.StageMaster sm ON st.stage_name = sm.StageName
+            WHERE st.process_id = %s
+            ORDER BY 
+                CASE WHEN st.Status IS NULL OR st.Status != 'Completed' THEN 0 ELSE 1 END,
+                st.ST_id DESC
             """,
             (process_id,)
         )
-        incomplete_stage_result = cursor.fetchone()
+        stage_result = cursor.fetchone()
         
         current_stage = None
-        if incomplete_stage_result:
-            current_stage = incomplete_stage_result[0]
-        else:
-            # If all stages are completed, get the most recent stage to determine what's next
-            cursor.execute(
-                f"""
-                SELECT TOP 1 stage_name
-                FROM {DBSCHEMA}.StageTracking 
-                WHERE process_id = %s 
-                ORDER BY ST_id DESC
-                """,
-                (process_id,)
-            )
-            last_stage_result = cursor.fetchone()
-            if last_stage_result:
-                # Get the next stage from StageMaster
-                last_stage = last_stage_result[0]
-                cursor.execute(
-                    f"""
-                    SELECT NextStageName 
-                    FROM {DBSCHEMA}.StageMaster 
-                    WHERE StageName = %s
-                    """,
-                    (last_stage,)
-                )
-                next_stage_result = cursor.fetchone()
-                if next_stage_result and next_stage_result[0]:
-                    current_stage = next_stage_result[0]
-                else:
-                    # Process is complete, use the last completed stage
-                    current_stage = last_stage
+        if stage_result:
+            if stage_result[1] and stage_result[1] != 'Completed':
+                # Found incomplete stage
+                current_stage = stage_result[0]
+            elif stage_result[2]:
+                # All stages completed, get next stage
+                current_stage = stage_result[2]
             else:
-                # No stage tracking exists, default to "Process Registration"
-                current_stage = "Process Registration"
+                # Use last stage
+                current_stage = stage_result[0]
+        else:
+            # No stage tracking exists, default to "Process Registration"
+            current_stage = "Process Registration"
         
-        # Update the process_dict with the current incomplete stage from StageTracking
-        # This ensures we use the actual incomplete stage, not what's in ProcessRegistration table
+        cursor.close()
+        
+        # Update the process_dict with the current incomplete stage
         if current_stage:
             process_dict['CurrentStage'] = current_stage
-            print(f"Current incomplete stage from StageTracking: {current_stage}")
         
         return jsonify({
             "success": True,
             "process": process_dict,
             "stages": {
-                "initialTriage": triage_data,
-                "systemIntegration": integration_data,
-                "toBeDesign": design_data,
-                "approval": approval_data,
-                "development": development_data
+                "initialTriage": stages_data.get('initialTriage'),
+                "systemIntegration": stages_data.get('systemIntegration'),
+                "toBeDesign": stages_data.get('toBeDesign'),
+                "approval": stages_data.get('approval'),
+                "development": stages_data.get('development')
             },
-            "currentStage": current_stage  # Explicitly return the current incomplete stage
+            "currentStage": current_stage
         }), 200
             
     except Exception as e:
-        print(f"Error getting process registration detail: {e}")
+        current_app.logger.error(f"Error getting process registration detail: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         if cursor:

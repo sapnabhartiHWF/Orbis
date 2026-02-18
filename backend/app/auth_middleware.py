@@ -1,13 +1,13 @@
 import jwt
+import inspect
 from flask import request, jsonify, current_app
 from functools import wraps
 
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        # Skip authentication for OPTIONS requests (CORS preflight)
         if request.method == "OPTIONS":
-            return jsonify({"ok": True}), 200
+            return f(*args, **kwargs)
 
         token = None
 
@@ -26,15 +26,30 @@ def token_required(f):
             decoded = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
             user_id = decoded.get("UserId")
             user_name = decoded.get("UserName")
+            role_id = decoded.get("RoleId")
 
             if not user_id:
                 return jsonify({"message": "Invalid token: user_id missing"}), 401
 
         except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Your session has expired. Please log in again to continue."}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token!"}), 401
+            return jsonify({
+                "error": "TOKEN_EXPIRED",
+                "message": "Session expired"
+            }), 401
 
-        # Pass user info to the route
-        return f(user_id, user_name, *args, **kwargs)
+        except jwt.InvalidTokenError:
+            return jsonify({
+                "error": "INVALID_TOKEN",
+                "message": "Invalid authentication token"
+            }), 401
+
+        request.user = {
+            "UserId": user_id,
+            "UserName": user_name,
+            "RoleId": role_id,
+            "CompanyIds": decoded.get("CompanyIds")
+        }
+
+        return f(*args, **kwargs)
+
     return decorated

@@ -16,7 +16,9 @@ import {
   Zap,
   Settings,
   TrendingUp,
-  LogOut
+  LogOut,
+  Bot,
+  CheckCircle
 } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
@@ -55,6 +57,20 @@ const navigationGroups = [
         url: "/collaboration-hub", 
         icon: Users,
         description: "Team collaboration & projects",
+        isNew: false
+      },
+      {
+        title: "Success",
+        url: "/success",
+        icon: CheckCircle,
+        description: "Success stories & achievements",
+        isNew: false
+      },
+      { 
+        title: "Exceptions", 
+        url: "/exceptions", 
+        icon: AlertTriangle,
+        description: "Error analysis & patterns",
         isNew: false
       },
       { 
@@ -123,11 +139,11 @@ const navigationGroups = [
         description: "Process rules & versions",
         isNew: false
       },
-      { 
-        title: "Exceptions", 
-        url: "/exceptions", 
-        icon: AlertTriangle,
-        description: "Error analysis & patterns",
+      {
+        title: "My Profile",
+        url: "/profile",
+        icon: Users,
+        description: "View your profile and pending reviews",
         isNew: false
       }
     ]
@@ -141,6 +157,32 @@ export function AppSidebar() {
   const collapsed = state === "collapsed"
   const { logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  
+  // Determine if we're using ICAT schema
+  // For localhost/development, default to ICAT (matching backend logic)
+  // For production, check URL for ICAT
+  const isIcatUrl = typeof window !== 'undefined' && (() => {
+    const href = window.location.href.toLowerCase()
+    const hostname = window.location.hostname.toLowerCase()
+    
+    // Check for ICAT production URL
+    if (href.includes('orbis-icat.alphalogix.tech') || href.includes('icat')) {
+      return true
+    }
+    
+    // For localhost/127.0.0.1, default to ICAT (matching backend default)
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname.includes('local')) {
+      return true
+    }
+    
+    // For santova production URL, return false
+    if (href.includes('orbis-santova.alphalogix.tech') || href.includes('santova')) {
+      return false
+    }
+    
+    // Default to ICAT for any other case (matching backend default)
+    return true
+  })()
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -176,11 +218,15 @@ export function AppSidebar() {
           {!collapsed ? (
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center">
-                <img 
-                  src="/ICAT-logo.svg" 
-                  alt="ICAT Logo" 
-                  className="h-10 w-auto"
-                />
+                {isIcatUrl ? (
+                  <img 
+                    src="/ICAT-logo.svg" 
+                    alt="ICAT Logo" 
+                    className="h-10 w-auto"
+                  />
+                ) : (
+                  <Bot className="h-10 w-10 text-primary" />
+                )}
               </div>
               <div>
                 <h1 className="text-lg font-bold text-foreground">RPA Command</h1>
@@ -189,11 +235,15 @@ export function AppSidebar() {
             </div>
           ) : (
             <div className="flex items-center justify-center mx-auto">
-              <img 
-                src="/ICAT-logo.svg" 
-                alt="ICAT Logo" 
-                className="h-10 w-auto"
-              />
+              {isIcatUrl ? (
+                <img 
+                  src="/ICAT-logo.svg" 
+                  alt="ICAT Logo" 
+                  className="h-10 w-auto"
+                />
+              ) : (
+                <Bot className="h-10 w-10 text-primary" />
+              )}
             </div>
           )}
         </div>

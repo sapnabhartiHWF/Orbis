@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, send_file, current_app
 from app.Database.connection import connect_to_database
 from app.auth_middleware import token_required
 from app.file_management.ftp_utils import get_ftp_manager
+from app.utils.db_schema import get_db_schema  # ✅ Import common utility (defaults to ICAT)
 import os
 from werkzeug.utils import secure_filename
 from typing import Optional, Tuple, Dict, Any
@@ -63,34 +64,6 @@ def get_file_extension_from_mime_type(mime_type: Optional[str], file_path: Optio
     return "bin"
 
 
-def get_db_schema() -> str:
-    """Get DBSCHEMA based on Origin header"""
-    host = request.headers.get("Origin") or request.headers.get("Referer") or ""
-    DBSCHEMA = "santova"
-    
-    # Check for ICAT schema - support multiple possible origins
-    icat_origins = [
-        "https://orbis-icat.alphalogix.tech",
-        "http://orbis-icat.alphalogix.tech",
-        "orbis-icat.alphalogix.tech",
-        "icat.alphalogix.tech"
-    ]
-    
-    # Check if host contains any ICAT identifier
-    if host:
-        host_lower = host.lower()
-        # Check for exact match or contains ICAT
-        if any(icat_origin.lower() in host_lower for icat_origin in icat_origins) or "icat" in host_lower:
-            DBSCHEMA = "ICAT"
-            print(f"Using ICAT schema for origin: {host}")
-        else:
-            print(f"Using santova schema for origin: {host}")
-    else:
-        print("No Origin/Referer header found, defaulting to santova schema")
-    
-    return DBSCHEMA
-
-
 def download_file_with_count(
     process_id: int,
     query_config: Dict[str, Any],
@@ -126,13 +99,27 @@ def download_file_with_count(
             }), None
 
         file_path_value = row[query_config["file_path_index"]]
-        download_count = row[query_config["download_count_index"]]
-        record_id = row[query_config["id_column_index"]]
-        mime_type = (
-            row[query_config["mime_type_index"]]
-            if query_config.get("mime_type_index") is not None
-            else None
-        )
+        # Safely extract optional indices (download_count may not exist in older schemas)
+        download_count = None
+        if query_config.get("download_count_index") is not None:
+            try:
+                download_count = row[query_config["download_count_index"]]
+            except Exception:
+                download_count = None
+
+        record_id = None
+        if query_config.get("id_column_index") is not None:
+            try:
+                record_id = row[query_config["id_column_index"]]
+            except Exception:
+                record_id = None
+
+        mime_type = None
+        if query_config.get("mime_type_index") is not None:
+            try:
+                mime_type = row[query_config["mime_type_index"]]
+            except Exception:
+                mime_type = None
 
         # 🔴 HARD FAIL: path must include filename with extension
         if not file_path_value or "." not in os.path.basename(file_path_value):
@@ -192,17 +179,28 @@ def download_file_with_count(
                 "message": f"{error_context} file is empty. Please re-upload."
             }), None
 
-        # Increment download count
-        new_count = (download_count or 0) + 1
-        cursor.execute(
-            f"""
-            UPDATE {DBSCHEMA}.{update_config['table']}
-            SET {update_config['update_column']} = %s
-            WHERE {update_config['where_column']} = %s AND IsDeleted = 0
-            """,
-            (new_count, record_id)
-        )
-        conn.commit()
+        # Increment download count (best-effort) — failures here should NOT block file download
+        try:
+            new_count = (download_count or 0) + 1
+            cursor.execute(
+                f"""
+                UPDATE {DBSCHEMA}.{update_config['table']}
+                SET {update_config['update_column']} = %s
+                WHERE {update_config['where_column']} = %s AND IsDeleted = 0
+                """,
+                (new_count, record_id)
+            )
+            conn.commit()
+        except Exception as update_err:
+            # Log a warning and continue; don't abort the download if the count update fails
+            current_app.logger.warning(
+                f"Could not update download count for {error_context}: {str(update_err)}"
+            )
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
         # Extract extension from the actual file path (most reliable - preserves original extension)
         # This is CRITICAL: we must preserve the original file extension from the uploaded file
@@ -314,24 +312,28 @@ def download_file_with_count(
 
 @download_bp.route('/api/download-process-sampledata/<int:process_id>', methods=['GET'])
 @token_required
-def download_sample_data(user_id, user_name, process_id):
+def download_sample_data(process_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Download SampleData file for a process and increment download count.
     """
+    # NOTE: Do not SELECT the download-count column here because older DB schemas
+    # may not have it. We perform download-count updates in a best-effort try/except.
     query_config = {
         'table': 'ProcessRegistration',
-        'select_columns': ['P_id', 'SampledataPath', 'MimeType', 'SampleDataDownloadCount'],
+        'select_columns': ['P_id', 'SampledataPath', 'MimeType'],
         'where_clause': 'P_id = %s AND IsDeleted = 0',
         'where_params': (process_id,),
         'file_path_index': 1,
         'mime_type_index': 2,
-        'download_count_index': 3,
+        'download_count_index': None,
         'id_column_index': 0
     }
     
     update_config = {
         'table': 'ProcessRegistration',
-        'update_column': 'SampleDataDownloadCount',
+        'update_column': 'sampleDownloadCount',
         'where_column': 'P_id',
         'id_value_index': 0
     }
@@ -345,24 +347,27 @@ def download_sample_data(user_id, user_name, process_id):
 
 @download_bp.route('/api/download-process-sopdoc/<int:process_id>', methods=['GET'])
 @token_required
-def download_sop_doc(user_id, user_name, process_id):
+def download_sop_doc(process_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Download SopDoc file for a process and increment download count.
     """
+    # Avoid selecting the SopDocDownloadCount column directly (may not exist).
     query_config = {
         'table': 'ProcessRegistration',
-        'select_columns': ['P_id', 'SopDoc', 'SopMimetype', 'SopDocDownloadCount'],
+        'select_columns': ['P_id', 'SopDoc', 'SopMimetype'],
         'where_clause': 'P_id = %s AND IsDeleted = 0',
         'where_params': (process_id,),
         'file_path_index': 1,
         'mime_type_index': 2,
-        'download_count_index': 3,
+        'download_count_index': None,
         'id_column_index': 0
     }
     
     update_config = {
         'table': 'ProcessRegistration',
-        'update_column': 'SopDocDownloadCount',
+        'update_column': 'downloadCount',
         'where_column': 'P_id',
         'id_value_index': 0
     }
@@ -373,68 +378,110 @@ def download_sop_doc(user_id, user_name, process_id):
     
     return error_response if error_response else file_response
 
-
-@download_bp.route('/api/download-tobe-workflow/<int:process_id>', methods=['GET'])
+@download_bp.route('/api/download-process-pdd/<int:process_id>', methods=['GET'])
 @token_required
-def download_workflow_diagram(user_id, user_name, process_id):
-    """
-    Download Workflow Diagram file for TO-BE Design stage and increment download count.
-    """
-    query_config = {
-        'table': 'ToBeDesign',
-        'select_columns': ['D_id', 'WorkflowFilePath', 'WorkflowDownloadCount'],
-        'where_clause': 'process_id = %s AND IsDeleted = 0',
-        'where_params': (process_id,),
-        'file_path_index': 1,
-        'mime_type_index': None,  # No MIME type column
-        'download_count_index': 2,
-        'id_column_index': 0,
-        'use_top': True,
-        'order_by': 'ORDER BY D_id DESC'
-    }
-    
-    update_config = {
-        'table': 'ToBeDesign',
-        'update_column': 'WorkflowDownloadCount',
-        'where_column': 'D_id',
-        'id_value_index': 0
-    }
-    
-    error_response, file_response = download_file_with_count(
-        process_id, query_config, update_config, "Workflow Diagram"
-    )
-    
-    return error_response if error_response else file_response
+def download_process_pdd(process_id):
+    conn = None
+    cursor = None
 
+    try:
+        DBSCHEMA = get_db_schema()
+        current_app.logger.info(f"[PDD Download] Using schema: {DBSCHEMA} for process_id: {process_id}")
+        
+        conn = connect_to_database()
+        if not conn:
+            error_msg = "Database connection failed"
+            current_app.logger.error(f"[PDD Download] {error_msg}")
+            return jsonify({"success": False, "message": error_msg}), 500
+        
+        cursor = conn.cursor()
 
-@download_bp.route('/api/download-tobe-exception/<int:process_id>', methods=['GET'])
-@token_required
-def download_exception_handling_plan(user_id, user_name, process_id):
-    """
-    Download Exception Handling Plan file for TO-BE Design stage and increment download count.
-    """
-    query_config = {
-        'table': 'ToBeDesign',
-        'select_columns': ['D_id', 'ExceptionFilePath', 'ExceptionDownloadCount'],
-        'where_clause': 'process_id = %s AND IsDeleted = 0',
-        'where_params': (process_id,),
-        'file_path_index': 1,
-        'mime_type_index': None,  # No MIME type column
-        'download_count_index': 2,
-        'id_column_index': 0,
-        'use_top': True,
-        'order_by': 'ORDER BY D_id DESC'
-    }
-    
-    update_config = {
-        'table': 'ToBeDesign',
-        'update_column': 'ExceptionDownloadCount',
-        'where_column': 'D_id',
-        'id_value_index': 0
-    }
-    
-    error_response, file_response = download_file_with_count(
-        process_id, query_config, update_config, "Exception Handling Plan"
-    )
-    
-    return error_response if error_response else file_response
+        # Use stored procedure to get PDD data (same as get_technical_assessment)
+        # If this fails, throw error immediately - don't try other schemas
+        try:
+            cursor.execute(
+                f"EXEC {DBSCHEMA}.GetTechnicalAssessment @ProcessId=%s",
+                (process_id,)
+            )
+            result = cursor.fetchall()
+        except Exception as sp_error:
+            # Log the error with schema info and re-raise immediately
+            error_msg = f"Error executing GetTechnicalAssessment in schema '{DBSCHEMA}': {str(sp_error)}"
+            current_app.logger.error(f"[PDD Download] {error_msg}")
+            raise Exception(error_msg) from sp_error
+
+        if not result:
+            error_msg = f"PDD not found for process {process_id} in schema '{DBSCHEMA}'"
+            current_app.logger.warning(f"[PDD Download] {error_msg}")
+            return jsonify({"success": False, "message": error_msg}), 404
+
+        # Get column names from cursor description
+        columns = [column[0] for column in cursor.description]
+        tech_assessment_dict = dict(zip(columns, result[0]))
+
+        # Extract PDD path and MIME type (handle both naming conventions)
+        pdd_path = tech_assessment_dict.get('DA_pddPath') or tech_assessment_dict.get('pddPath')
+        mime_type = tech_assessment_dict.get('DA_MimeType') or tech_assessment_dict.get('MimeType')
+        da_id = tech_assessment_dict.get('DA_id')
+
+        if not pdd_path:
+            return jsonify({"success": False, "message": "PDD file path not found"}), 404
+
+        # Normalize path
+        pdd_path = pdd_path.replace("\\", "/")
+
+        # Build file path
+        file_path = pdd_path if os.path.isabs(pdd_path) else os.path.join(UPLOAD_FOLDER, pdd_path)
+
+        # Try FTP if not found locally
+        if not os.path.exists(file_path):
+            ftp_manager = get_ftp_manager(DBSCHEMA)
+            if not ftp_manager:
+                return jsonify({"success": False, "message": "File not found locally and FTP not configured"}), 404
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            remote_path = "/" + pdd_path.lstrip("/")
+            success, msg = ftp_manager.download_file(remote_path, file_path)
+            if not success or not os.path.exists(file_path):
+                return jsonify({"success": False, "message": f"FTP download failed: {msg}"}), 404
+
+        # Validate file size
+        if os.path.getsize(file_path) == 0:
+            return jsonify({"success": False, "message": "PDD file is empty"}), 400
+
+        if da_id:
+            try:
+                cursor.execute(
+                    f"UPDATE {DBSCHEMA}.DetailedAnalysisStage SET downloadCount = ISNULL(downloadCount, 0) + 1 WHERE DA_id = %s",
+                    (da_id,)
+                )
+                conn.commit()
+            except Exception as update_error:
+                
+                current_app.logger.warning(f"Could not update download count (non-critical): {str(update_error)}")
+                if conn:
+                    conn.rollback()
+
+        # Extract extension from file path
+        ext = os.path.splitext(pdd_path)[1].lstrip(".") or "bin"
+        if not ext or ext == "":
+            # Fallback to MIME type
+            ext = get_file_extension_from_mime_type(mime_type, pdd_path)
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=f"pdd_process_{process_id}.{ext}",
+            mimetype=mime_type or "application/octet-stream"
+        )
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        current_app.logger.exception(f"Error downloading PDD: {str(e)}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

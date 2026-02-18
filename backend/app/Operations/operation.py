@@ -34,32 +34,53 @@ def db_summary_report(schema: str = "AirlineProcessHeaderDetail"):
     return report
 
 
-def airline_details(schema: str = "AirlineProcessHeaderDetail"):
+def airline_details(schema: str = "AirlineProcessHeaderDetail", bot_id: int = None):
     """
-    Get airline details with flight numbers and statuses.
+    Get airline details with flight numbers, statuses, and bot ID.
     
     Args:
         schema: Database schema name (AirlineProcessHeaderDetail for ICAT URL, santova for others)
+        bot_id: Optional Bot ID to filter flight details
     """
     conn = db_connect()
     cursor = conn.cursor()
-    cursor.execute(f"select fd.FlightNumber,fd.Status,fd.AirlineStatus from {schema}.FlightDetails fd")
+
+    query = f"""
+        SELECT 
+            fd.FlightNumber,
+            fd.Status,
+            fd.AirlineStatus,
+            fd.BotId
+        FROM {schema}.FlightDetails fd
+    """
+    
+    params = []
+    if bot_id:
+        query += " WHERE fd.BotId = %s"
+        params.append(bot_id)
+
+    cursor.execute(query, tuple(params))
+
     details = cursor.fetchall()
     final_data = []
+
     for row in details:
         final_data.append({
             "Flight Number": row[0],
             "Flight Status": row[1],
-            "Airline Status": row[2]
+            "Airline Status": row[2],
+            "BotId": row[3]
         })
-    conn.close()
+
     cursor.close()
+    conn.close()
+
     return final_data
 
 
 def morgan_stanley_details(schema: str = "AirlineProcessHeaderDetail"):
     """
-    Get Morgan Stanley details by calling stored procedure SP_GetMorganStanley.
+    Get Morgan Stanley details by calling stored procedure GetMorganStanley.
     
     Args:
         schema: Database schema name (AirlineProcessHeaderDetail for ICAT URL, santova for others)
@@ -92,3 +113,58 @@ def morgan_stanley_details(schema: str = "AirlineProcessHeaderDetail"):
     finally:
         conn.close()
         cursor.close()
+
+def operations_by_bot(schema: str, bot_id: int):
+    """
+    Return data based on BotId mapping
+    BotId = 1 → Morgan Stanley
+    BotId = 2 → Flight Details (BWI)
+    """
+    conn = db_connect()
+    cursor = conn.cursor()
+    final_data = []
+
+    try:
+        # 🏦 Morgan Stanley
+        if bot_id == 1:
+            cursor.execute(f"""
+                SELECT *
+                FROM {schema}.MorganStanley
+                WHERE BotId = %s
+                ORDER BY CreatedOn DESC
+            """, (bot_id,))
+
+            columns = [col[0] for col in cursor.description]
+            for row in cursor.fetchall():
+                final_data.append(dict(zip(columns, row)))
+
+        # ✈️ Flight Details (BWI)
+        elif bot_id == 2:
+            cursor.execute(f"""
+                SELECT 
+                    FlightNumber,
+                    Status,
+                    AirlineStatus,
+                    BotId
+                FROM {schema}.FlightDetails
+                WHERE BotId = %s
+                ORDER BY CreatedOn DESC
+            """, (bot_id,))
+
+            for row in cursor.fetchall():
+                final_data.append({
+                    "Flight Number": row[0],
+                    "Flight Status": row[1],
+                    "Airline Status": row[2],
+                    "BotId": row[3]
+                })
+
+        else:
+            final_data = []
+
+        return final_data
+
+    finally:
+        cursor.close()
+        conn.close()
+

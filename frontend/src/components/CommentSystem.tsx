@@ -86,12 +86,12 @@ export function CommentSystem({
 
   const mentionRef = useRef<HTMLDivElement>(null);
 
-  const userUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/users";
-  const getcmtUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/get-comments";
-  const addcmtUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/add-comment";
-  const reactCommentUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/react-comment";
-  const getAllReact = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/get-all-reacts";
-  const deleteReactUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/delete-reaction";
+  const userUrl = "http://127.0.0.1:8000/api/users";
+  const getcmtUrl = "http://127.0.0.1:8000/api/get-comments";
+  const addcmtUrl = "http://127.0.0.1:8000/api/add-comment";
+  const reactCommentUrl = "http://127.0.0.1:8000/api/react-comment";
+  const getAllReact = "http://127.0.0.1:8000/api/get-all-reacts";
+  const deleteReactUrl = "http://127.0.0.1:8000/api/delete-reaction";
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const token = localStorage.getItem("token");
@@ -149,9 +149,9 @@ export function CommentSystem({
       const data = await response.json();
       const fetchedUsers: User[] = Array.isArray(data.data)
         ? data.data.map((u: any) => ({
-            id: u.UserId,
-            name: `${u.FirstName} ${u.LastName}`.trim(),
-          }))
+          id: u.UserId,
+          name: `${u.FirstName} ${u.LastName}`.trim(),
+        }))
         : [];
       setAllUsers(fetchedUsers);
       setUsers(fetchedUsers);
@@ -453,18 +453,18 @@ export function CommentSystem({
         }
       } else {
         // Other error when adding
-        toast({ 
-          title: "Failed to react", 
+        toast({
+          title: "Failed to react",
           description: addData.message || "An error occurred",
-          variant: "destructive" 
+          variant: "destructive"
         });
       }
     } catch (err) {
       console.error("Error toggling reaction:", err);
-      toast({ 
-        title: "Network error", 
+      toast({
+        title: "Network error",
         description: "Please try again",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   };
@@ -531,7 +531,7 @@ export function CommentSystem({
             <Send className="w-4 h-4 text-blue-600" />
           </div>
 
-          <div ref={mentionRef}  className="flex-1 space-y-2 relative">
+          <div ref={mentionRef} className="flex-1 space-y-2 relative">
             <Textarea
               ref={textareaRef}
               placeholder="Add a comment... Use @username to mention team members"
@@ -685,7 +685,7 @@ function CommentItem({
         MentionedUserIDs: [],
       };
 
-      const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app//api/add-comment", {
+      const response = await fetch("http://127.0.0.1:8000/api/add-comment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

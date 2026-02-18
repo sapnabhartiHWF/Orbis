@@ -1,11 +1,23 @@
-import { useState } from "react"
-import { Calendar, Clock, Target, Users, TrendingUp, ChevronLeft, ChevronRight, Eye } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Calendar, Clock, Target, Users, TrendingUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, CheckCircle2, Circle, Loader } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "@/hooks/use-toast"
+import { getAutomationRoadmap } from "@/services/processRegistrationApi"
+
+// ----------------------------------------------------------------
+// Types — aligned with SP column names
+// ----------------------------------------------------------------
+interface Milestone {
+  name: string
+  date: string
+  movedBy: string
+  completed: boolean
+  inProgress: boolean
+}
 
 interface RoadmapItem {
   id: string
@@ -13,165 +25,229 @@ interface RoadmapItem {
   description: string
   quarter: string
   year: number
-  status: "Not Started" | "Planning" | "In Progress" | "Completed" | "On Hold"
+  status: "Not Started" | "In Progress" | "Completed"
   priority: "Low" | "Medium" | "High" | "Critical"
   department: string
   estimatedROI: number
   timeline: { start: string; end: string }
   progress: number
-  dependencies: string[]
-  resources: string[]
-  milestones: { name: string; date: string; completed: boolean }[]
+  submittedBy: string
+  milestones: Milestone[]
 }
 
-const roadmapData: RoadmapItem[] = []
-/* [
-  {
-    id: "R001",
-    title: "Invoice Processing Automation",
-    description: "End-to-end invoice automation with OCR and approval workflows",
-    quarter: "Q1",
-    year: 2024,
-    status: "In Progress",
-    priority: "High",
-    department: "Finance",
-    estimatedROI: 340000,
-    timeline: { start: "2024-01-15", end: "2024-03-30" },
-    progress: 65,
-    dependencies: ["ERP Integration", "OCR System"],
-    resources: ["Sarah Chen", "Dev Team Alpha"],
-    milestones: [
-      { name: "Requirements Analysis", date: "2024-01-30", completed: true },
-      { name: "System Design", date: "2024-02-15", completed: true },
-      { name: "Development Phase", date: "2024-03-15", completed: false },
-      { name: "Testing & Deployment", date: "2024-03-30", completed: false }
-    ]
-  },
-  {
-    id: "R002",
-    title: "HR Onboarding Automation",
-    description: "Streamlined employee onboarding with document management",
-    quarter: "Q2",
-    year: 2024,
-    status: "Planning",
-    priority: "Medium",
-    department: "HR",
-    estimatedROI: 180000,
-    timeline: { start: "2024-04-01", end: "2024-06-30" },
-    progress: 25,
-    dependencies: ["HRIS Integration"],
-    resources: ["Michael Rodriguez", "Dev Team Beta"],
-    milestones: [
-      { name: "Stakeholder Alignment", date: "2024-04-15", completed: false },
-      { name: "Process Mapping", date: "2024-05-01", completed: false },
-      { name: "System Development", date: "2024-06-15", completed: false },
-      { name: "Go-Live", date: "2024-06-30", completed: false }
-    ]
-  },
-  {
-    id: "R003",
-    title: "Customer Service AI Chatbot",
-    description: "Intelligent chatbot for first-level customer support",
-    quarter: "Q3",
-    year: 2024,
-    status: "Not Started",
-    priority: "High",
-    department: "Customer Service",
-    estimatedROI: 450000,
-    timeline: { start: "2024-07-01", end: "2024-09-30" },
-    progress: 0,
-    dependencies: ["NLP Platform", "Knowledge Base"],
-    resources: ["AI Team", "Customer Service Team"],
-    milestones: [
-      { name: "AI Model Selection", date: "2024-07-15", completed: false },
-      { name: "Training Data Preparation", date: "2024-08-15", completed: false },
-      { name: "Integration Testing", date: "2024-09-15", completed: false },
-      { name: "Production Deployment", date: "2024-09-30", completed: false }
-    ]
-  },
-  {
-    id: "R004",
-    title: "Supply Chain Optimization",
-    description: "Predictive analytics for inventory management and supplier optimization",
-    quarter: "Q4",
-    year: 2024,
-    status: "Not Started",
-    priority: "Critical",
-    department: "Operations",
-    estimatedROI: 620000,
-    timeline: { start: "2024-10-01", end: "2024-12-31" },
-    progress: 0,
-    dependencies: ["Data Warehouse", "Analytics Platform"],
-    resources: ["Operations Team", "Data Science Team"],
-    milestones: [
-      { name: "Data Integration", date: "2024-10-31", completed: false },
-      { name: "Model Development", date: "2024-11-30", completed: false },
-      { name: "Pilot Testing", date: "2024-12-15", completed: false },
-      { name: "Full Rollout", date: "2024-12-31", completed: false }
-    ]
-  },
-  {
-    id: "R005",
-    title: "Financial Reporting Automation",
-    description: "Automated monthly and quarterly financial reporting",
-    quarter: "Q1",
-    year: 2025,
-    status: "Not Started",
-    priority: "Medium",
-    department: "Finance",
-    estimatedROI: 280000,
-    timeline: { start: "2025-01-01", end: "2025-03-31" },
-    progress: 0,
-    dependencies: ["ERP System", "Business Intelligence Tools"],
-    resources: ["Finance Team", "BI Team"],
-    milestones: [
-      { name: "Report Templates Design", date: "2025-01-31", completed: false },
-      { name: "Automation Scripts", date: "2025-02-28", completed: false },
-      { name: "Testing & Validation", date: "2025-03-15", completed: false },
-      { name: "Production Release", date: "2025-03-31", completed: false }
-    ]
-  }
-] */
+interface BackendRoadmapItem {
+  ProcessId?: number
+  Title?: string
+  Description?: string
+  CurrentStage?: string   // actual stage name e.g. "Development"
+  Status?: string         // derived label e.g. "In Progress"
+  Priority?: string
+  Department?: string
+  EstimatedROI?: number
+  Progress?: number
+  TimelineStart?: string | null
+  TimelineEnd?: string | null
+  SubmittedBy?: string
+  milestones?: Array<{
+    StageName?: string
+    SequenceOrder?: number
+    movedAt?: string | null
+    MovedByName?: string | null
+    status?: string
+    IsCompleted?: number
+  }>
+}
 
+// ----------------------------------------------------------------
+// Map backend → RoadmapItem
+// No getAllStages() needed — milestones come from RS2 already nested
+// ----------------------------------------------------------------
+const mapBackendToRoadmapItem = (item: BackendRoadmapItem): RoadmapItem => {
+  const startDate = item.TimelineStart ? new Date(item.TimelineStart) : new Date()
+  const year      = startDate.getFullYear()
+  const month     = startDate.getMonth() + 1
+  const quarter   = month <= 3 ? "Q1" : month <= 6 ? "Q2" : month <= 9 ? "Q3" : "Q4"
+
+  // Sort milestones by SequenceOrder (SP already orders, but be safe)
+  const sorted = [...(item.milestones || [])].sort(
+    (a, b) => (a.SequenceOrder ?? 0) - (b.SequenceOrder ?? 0)
+  )
+
+  // Match each milestone against CurrentStage from the process card.
+  // movedAt means the process *entered* that stage, not that it left it.
+  // So the current stage has movedAt but should still show as blue (in-progress).
+  const currentStageName = (item.CurrentStage || "").toLowerCase()
+  const currentStageIdx  = sorted.findIndex(
+    m => (m.StageName || "").toLowerCase() === currentStageName
+  )
+
+  const milestones: Milestone[] = sorted.map((m, idx) => {
+    const isCompleted  = currentStageIdx >= 0 ? idx < currentStageIdx : (!!m.IsCompleted || !!m.movedAt)
+    const isInProgress = idx === currentStageIdx
+    return {
+      name:       m.StageName    || "Stage",
+      date:       m.movedAt      || "",
+      movedBy:    m.MovedByName  || "",
+      completed:  isCompleted,
+      inProgress: isInProgress,
+    }
+  })
+
+  return {
+    id:           `R${String(item.ProcessId || 0).padStart(3, "0")}`,
+    title:        item.Title        || "Untitled Process",
+    description:  item.Description  || "",
+    quarter,
+    year,
+    status:       (item.Status as any) || "Not Started",
+    priority:     (item.Priority as any) || "Medium",
+    department:   item.Department   || "Unknown",
+    estimatedROI: item.EstimatedROI || 0,
+    timeline: {
+      start: item.TimelineStart || new Date().toISOString().split("T")[0],
+      end:   item.TimelineEnd   || new Date().toISOString().split("T")[0],
+    },
+    progress:    item.Progress    || 0,
+    submittedBy: item.SubmittedBy || "",
+    milestones,
+  }
+}
+
+// ----------------------------------------------------------------
+// Style helpers
+// ----------------------------------------------------------------
 const getStatusColor = (status: string) => {
   switch (status) {
     case "Not Started": return "bg-muted text-muted-foreground"
-    case "Planning": return "bg-blue-500/20 text-blue-400 border-blue-500/30"
-    case "In Progress": return "bg-primary/20 text-primary-foreground border-primary/30"
-    case "Completed": return "bg-success/20 text-success-foreground border-success/30"
-    case "On Hold": return "bg-warning/20 text-warning-foreground border-warning/30"
-    default: return "bg-muted text-muted-foreground"
+    case "In Progress": return "bg-blue-500/20 text-blue-600 border-blue-500/30"
+    case "Completed":   return "bg-success/20 text-success-foreground border-success/30"
+    default:            return "bg-muted text-muted-foreground"
   }
 }
 
 const getPriorityColor = (priority: string) => {
   switch (priority) {
-    case "Low": return "bg-muted text-muted-foreground"
-    case "Medium": return "bg-blue-500/20 text-blue-400"
-    case "High": return "bg-warning/20 text-warning-foreground"
+    case "Low":      return "bg-muted text-muted-foreground"
+    case "Medium":   return "bg-blue-500/20 text-blue-400"
+    case "High":     return "bg-warning/20 text-warning-foreground"
     case "Critical": return "bg-destructive/20 text-destructive-foreground"
-    default: return "bg-muted text-muted-foreground"
+    default:         return "bg-muted text-muted-foreground"
   }
 }
 
-export function AutomationRoadmap() {
-  const [selectedYear, setSelectedYear] = useState(2024)
-  const [selectedView, setSelectedView] = useState<"quarterly" | "annual">("quarterly")
-  const [selectedQuarter, setSelectedQuarter] = useState("Q1")
+// ----------------------------------------------------------------
+// ROI formatter — smart units: <1K shows raw, >=1K shows K, >=1M shows M
+// ----------------------------------------------------------------
+const formatROI = (value: number): string => {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000)     return `$${(value / 1_000).toFixed(0)}K`
+  if (value > 0)          return `$${value.toLocaleString()}`
+  return "$0"
+}
 
-  const filteredData = roadmapData.filter(item => 
-    selectedView === "annual" ? item.year === selectedYear : 
-    item.year === selectedYear && item.quarter === selectedQuarter
+// ----------------------------------------------------------------
+// Component
+// ----------------------------------------------------------------
+export function AutomationRoadmap() {
+  const [selectedYear,    setSelectedYear]    = useState(new Date().getFullYear())
+  const [selectedView,    setSelectedView]    = useState<"quarterly" | "annual">("quarterly")
+  const [selectedQuarter, setSelectedQuarter] = useState(`Q${Math.ceil((new Date().getMonth() + 1) / 3)}`)
+  const [roadmapData,     setRoadmapData]     = useState<RoadmapItem[]>([])
+  const [expandedId,      setExpandedId]      = useState<string | null>(null)
+  const [isLoading,       setIsLoading]       = useState(true)
+  const [error,           setError]           = useState<string | null>(null)
+
+  // ── Fetch once on mount ──────────────────────────────────────
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await getAutomationRoadmap()
+
+        if (response.success && response.data) {
+          const mapped: RoadmapItem[] = response.data.map(
+            (item: BackendRoadmapItem) => mapBackendToRoadmapItem(item)
+          )
+          setRoadmapData(mapped)
+
+          // Default year to earliest year found in data
+          if (mapped.length > 0) {
+            setSelectedYear(Math.min(...mapped.map(i => i.year)))
+          }
+        } else {
+          const msg = response.error || "Failed to load automation roadmap"
+          setError(msg)
+          toast({ title: "Error", description: msg, variant: "destructive" })
+        }
+      } catch (err: any) {
+        const msg = err?.message || "Failed to fetch automation roadmap"
+        setError(msg)
+        toast({ title: "Error", description: msg, variant: "destructive" })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  // ── Filter by year / quarter ─────────────────────────────────
+  const filteredData = roadmapData.filter(item =>
+    selectedView === "annual"
+      ? item.year === selectedYear
+      : item.year === selectedYear && item.quarter === selectedQuarter
   )
 
-  const totalROI = filteredData.reduce((sum, item) => sum + item.estimatedROI, 0)
-  const completedItems = filteredData.filter(item => item.status === "Completed").length
-  const inProgressItems = filteredData.filter(item => item.status === "In Progress").length
+  const totalROI        = filteredData.reduce((s, i) => s + i.estimatedROI, 0)
+  const completedItems  = filteredData.filter(i => i.status === "Completed").length
+  const inProgressItems = filteredData.filter(i => i.status === "In Progress").length
+  const availableYears  = Array.from(new Set(roadmapData.map(i => i.year))).sort()
+  const quarters        = ["Q1", "Q2", "Q3", "Q4"]
 
+  const toggleExpand = (id: string) => {
+    setExpandedId(prev => prev === id ? null : id)
+  }
+
+  const navigateQuarter = (dir: -1 | 1) => {
+    const idx = quarters.indexOf(selectedQuarter) + dir
+    if (idx >= 0 && idx < 4) setSelectedQuarter(quarters[idx])
+  }
+
+  // ── Loading ──────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading automation roadmap...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Error ────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="bg-card border-border">
+          <CardContent className="p-6 text-center">
+            <p className="text-destructive mb-2">Failed to load automation roadmap</p>
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // ── Main render ──────────────────────────────────────────────
   return (
     <div className="space-y-6">
+
       {/* Header Controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
             <Calendar className="w-6 h-6 text-primary-foreground" />
@@ -182,65 +258,40 @@ export function AutomationRoadmap() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <Select value={selectedView} onValueChange={(value: "quarterly" | "annual") => setSelectedView(value)}>
-            <SelectTrigger className="w-40 bg-card border-border">
-              <SelectValue />
-            </SelectTrigger>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Select value={selectedView} onValueChange={(v: "quarterly" | "annual") => setSelectedView(v)}>
+            <SelectTrigger className="w-40 bg-card border-border"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="quarterly">Quarterly View</SelectItem>
               <SelectItem value="annual">Annual View</SelectItem>
             </SelectContent>
           </Select>
 
-          <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
-            <SelectTrigger className="w-28 bg-card border-border">
-              <SelectValue />
-            </SelectTrigger>
+          <Select value={selectedYear.toString()} onValueChange={v => setSelectedYear(parseInt(v))}>
+            <SelectTrigger className="w-28 bg-card border-border"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="2024">2024</SelectItem>
-              <SelectItem value="2025">2025</SelectItem>
-              <SelectItem value="2026">2026</SelectItem>
+              {(availableYears.length > 0 ? availableYears : [2024, 2025, 2026]).map(y => (
+                <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
           {selectedView === "quarterly" && (
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const quarters = ["Q1", "Q2", "Q3", "Q4"]
-                  const currentIndex = quarters.indexOf(selectedQuarter)
-                  if (currentIndex > 0) setSelectedQuarter(quarters[currentIndex - 1])
-                }}
-                disabled={selectedQuarter === "Q1"}
-              >
+              <Button variant="outline" size="sm"
+                onClick={() => navigateQuarter(-1)}
+                disabled={selectedQuarter === "Q1"}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              
               <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
-                <SelectTrigger className="w-20 bg-card border-border">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-20 bg-card border-border"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Q1">Q1</SelectItem>
-                  <SelectItem value="Q2">Q2</SelectItem>
-                  <SelectItem value="Q3">Q3</SelectItem>
-                  <SelectItem value="Q4">Q4</SelectItem>
+                  {quarters.map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
                 </SelectContent>
               </Select>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const quarters = ["Q1", "Q2", "Q3", "Q4"]
-                  const currentIndex = quarters.indexOf(selectedQuarter)
-                  if (currentIndex < 3) setSelectedQuarter(quarters[currentIndex + 1])
-                }}
-                disabled={selectedQuarter === "Q4"}
-              >
+              <Button variant="outline" size="sm"
+                onClick={() => navigateQuarter(1)}
+                disabled={selectedQuarter === "Q4"}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
@@ -256,7 +307,7 @@ export function AutomationRoadmap() {
               <div>
                 <p className="text-primary-foreground/80 text-sm font-medium">Total ROI</p>
                 <p className="text-2xl font-bold text-primary-foreground">
-                  ${(totalROI / 1000000).toFixed(1)}M
+                  {formatROI(totalROI)}
                 </p>
               </div>
               <TrendingUp className="w-8 h-8 text-primary-foreground/80" />
@@ -302,87 +353,218 @@ export function AutomationRoadmap() {
       </div>
 
       {/* Roadmap Items */}
-      <div className="space-y-4">
-        {filteredData.map((item) => (
-          <Card key={item.id} className="bg-card border-border shadow-card hover:shadow-elevated transition-all duration-300">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Badge className={getPriorityColor(item.priority)}>
-                      {item.priority}
-                    </Badge>
-                    <Badge className={getStatusColor(item.status)}>
-                      {item.status}
-                    </Badge>
+      {filteredData.length === 0 ? (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <Calendar className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground mb-2">No roadmap items found</p>
+            <p className="text-sm text-muted-foreground">
+              {selectedView === "annual"
+                ? `No items found for ${selectedYear}`
+                : `No items found for ${selectedQuarter} ${selectedYear}`}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {filteredData.map((item) => (
+            <Card key={item.id} className="bg-card border-border shadow-card hover:shadow-elevated transition-all duration-300">
+              {/* ── Clickable Header ── */}
+              <div
+                className="cursor-pointer select-none"
+                onClick={() => toggleExpand(item.id)}
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Badge className={getPriorityColor(item.priority)}>{item.priority}</Badge>
+                        <Badge className={getStatusColor(item.status)}>{item.status}</Badge>
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{item.title}</CardTitle>
+                        <CardDescription>{item.description}</CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">
+                          ROI: {formatROI(item.estimatedROI)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{item.department}</p>
+                      </div>
+                      <div className="text-muted-foreground">
+                        {expandedId === item.id
+                          ? <ChevronUp className="w-5 h-5" />
+                          : <ChevronDown className="w-5 h-5" />}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">{item.title}</CardTitle>
-                    <CardDescription>{item.description}</CardDescription>
-                  </div>
-                </div>
-                
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">ROI: ${(item.estimatedROI / 1000).toFixed(0)}K</p>
-                  <p className="text-sm text-muted-foreground">{item.department}</p>
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              <div className="space-y-4">
-                {/* Progress */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Progress</span>
-                    <span>{item.progress}%</span>
-                  </div>
-                  <Progress value={item.progress} className="h-2" />
-                </div>
+                </CardHeader>
 
-                {/* Timeline */}
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>{new Date(item.timeline.start).toLocaleDateString()} - {new Date(item.timeline.end).toLocaleDateString()}</span>
-                  <span>{Math.ceil((new Date(item.timeline.end).getTime() - new Date(item.timeline.start).getTime()) / (1000 * 60 * 60 * 24))} days</span>
-                </div>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Progress */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Progress</span>
+                        <span>{item.progress}%</span>
+                      </div>
+                      <Progress value={item.progress} className="h-2" />
+                    </div>
 
-                {/* Milestones */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                  {item.milestones.map((milestone, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs">
-                      <div className={`w-2 h-2 rounded-full ${milestone.completed ? 'bg-success' : 'bg-muted'}`} />
-                      <span className={milestone.completed ? 'text-success' : 'text-muted-foreground'}>
-                        {milestone.name}
+                    {/* Timeline */}
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>
+                        {new Date(item.timeline.start).toLocaleDateString()} –{" "}
+                        {new Date(item.timeline.end).toLocaleDateString()}
+                      </span>
+                      <span>
+                        {Math.ceil(
+                          (new Date(item.timeline.end).getTime() - new Date(item.timeline.start).getTime()) /
+                          (1000 * 60 * 60 * 24)
+                        )}{" "}
+                        days
                       </span>
                     </div>
-                  ))}
-                </div>
 
-                {/* Resources & Dependencies */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      {item.resources.join(", ")}
-                    </span>
-                  </div>
-                  
-                  {item.dependencies.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Dependencies:</span>
-                      {item.dependencies.map((dep, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {dep}
-                        </Badge>
+                    {/* Milestones — compact dots row */}
+                    <div className="flex items-center justify-between w-full gap-2 overflow-x-auto pb-1">
+                      {item.milestones.map((ms, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5 text-xs whitespace-nowrap flex-1 min-w-0 justify-center">
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            ms.completed
+                              ? "bg-success"
+                              : ms.inProgress
+                                ? "bg-blue-500 ring-2 ring-blue-500/30"
+                                : "bg-muted"
+                          }`} />
+                          <span className={`truncate ${
+                            ms.completed
+                              ? "text-success"
+                              : ms.inProgress
+                                ? "text-blue-600 font-medium"
+                                : "text-muted-foreground"
+                          }`}>
+                            {ms.name}
+                          </span>
+                        </div>
                       ))}
                     </div>
-                  )}
-                </div>
+
+                    {/* Submitted by */}
+                    {item.submittedBy && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground pt-1 border-t border-border">
+                        <Users className="w-3.5 h-3.5" />
+                        <span>Submitted by {item.submittedBy}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+              {/* ── Expanded Detail Panel ── */}
+              {expandedId === item.id && (
+                <div className="border-t border-border bg-muted/30 px-6 py-4 rounded-b-xl">
+
+                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary" />
+                    Stage Timeline
+                  </h4>
+
+                  {/* Vertical stage timeline */}
+                  <div className="relative pl-5">
+                    {/* Vertical connector line */}
+                    <div className="absolute left-[9px] top-3 bottom-1 w-px bg-border" />
+
+                    <div className="space-y-0">
+                      {item.milestones.map((ms, idx) => {
+                        const isLast = idx === item.milestones.length - 1
+                        return (
+                          <div key={idx} className="relative flex gap-3 pb-3 last:pb-0">
+                            {/* Stage icon */}
+                            <div className={`absolute -left-6 flex items-center justify-center w-5 h-5 rounded-full border-2 z-10 mt-0.5 ${
+                              ms.completed
+                                ? "bg-success border-success"
+                                : ms.inProgress
+                                  ? "bg-blue-500 border-blue-500"
+                                  : "bg-background border-border"
+                            }`}>
+                              {ms.completed
+                                ? <CheckCircle2 className="w-3 h-3 text-white" />
+                                : ms.inProgress
+                                  ? <Loader className="w-3 h-3 text-white animate-spin" />
+                                  : <Circle className="w-3 h-3 text-muted-foreground" />}
+                            </div>
+
+                            {/* Stage info — all left-aligned, compact */}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-sm font-medium ${
+                                  ms.completed
+                                    ? "text-success"
+                                    : ms.inProgress
+                                      ? "text-blue-600"
+                                      : "text-muted-foreground"
+                                }`}>
+                                  {ms.name}
+                                </span>
+                                {ms.inProgress && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-600 font-medium">
+                                    Current Stage
+                                  </span>
+                                )}
+                                {ms.date && (
+                                  <span className="text-xs text-muted-foreground">
+                                    · {new Date(ms.date).toLocaleDateString("en-US", {
+                                      month: "short", day: "numeric", year: "numeric"
+                                    })}
+                                  </span>
+                                )}
+                                {!ms.date && !ms.completed && !ms.inProgress && (
+                                  <span className="text-xs text-muted-foreground italic">Pending</span>
+                                )}
+                              </div>
+                              {ms.movedBy && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                  <Users className="w-3 h-3" />
+                                  {ms.movedBy}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Summary footer */}
+                  <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-0.5">Process ID</p>
+                      <p className="font-medium">{item.id}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-0.5">Department</p>
+                      <p className="font-medium">{item.department}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-0.5">Estimated ROI</p>
+                      <p className="font-medium text-success">{formatROI(item.estimatedROI)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs mb-0.5">Stages Done</p>
+                      <p className="font-medium">
+                        {item.milestones.filter(m => m.completed).length} / {item.milestones.length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -29,3 +29,5 @@ def connect_to_database():
     except pymssql.Error as e:
         print(f"Error connecting to the database: {e}")
         return None
+
+        

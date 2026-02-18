@@ -17,6 +17,10 @@ export interface FileUpload {
   triggerStatus?: string
   triggeredAt?: string | null
   notTriggeredReason?: string | null
+  reviewStatus?: string | null
+  // Morgan Stanley specific fields
+  morganStanleyStatus?: string | null
+  houseBill?: string | null
 }
 
 export interface Comment {
@@ -127,17 +131,17 @@ export function extractMentions(content: string): string[] {
 
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes'
-  
+
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 export function getFileTypeIcon(format: string): string {
   const formatLower = format.toLowerCase()
-  
+
   if (['pdf'].includes(formatLower)) return '📄'
   if (['doc', 'docx'].includes(formatLower)) return '📝'
   if (['xls', 'xlsx', 'csv'].includes(formatLower)) return '📊'
@@ -145,7 +149,7 @@ export function getFileTypeIcon(format: string): string {
   if (['mp4', 'avi', 'mov', 'wmv'].includes(formatLower)) return '🎥'
   if (['jpg', 'jpeg', 'png', 'gif', 'bmp'].includes(formatLower)) return '🖼️'
   if (['zip', 'rar', '7z'].includes(formatLower)) return '📦'
-  
+
   return '📎'
 }
 
@@ -153,7 +157,7 @@ export function getTimeAgo(dateString: string | null | undefined): string {
   if (!dateString) {
     return ''
   }
-  
+
   // Parse date string - handle both ISO format and SQL Server datetime format
   let date: Date
   try {
@@ -162,7 +166,7 @@ export function getTimeAgo(dateString: string | null | undefined): string {
     if (!str || str === 'null' || str === 'undefined' || str === '') {
       return ''
     }
-    
+
     // If date already has timezone info (Z or +), use as-is
     if (str.includes('Z') || str.includes('+') || (str.includes('-') && str.length > 10 && str.includes('T'))) {
       date = new Date(str)
@@ -199,7 +203,7 @@ export function getTimeAgo(dateString: string | null | undefined): string {
         }
       }
     }
-    
+
     // Validate date
     if (isNaN(date.getTime())) {
       return ''
@@ -207,29 +211,29 @@ export function getTimeAgo(dateString: string | null | undefined): string {
   } catch (e) {
     return ''
   }
-  
+
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-  
+
   // Handle negative differences (future dates) - show formatted date
   if (diffInSeconds < 0) {
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
       day: 'numeric',
       timeZone: 'UTC'
     })
   }
-  
+
   if (diffInSeconds < 60) return 'just now'
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
   if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`
-  
+
   // For dates older than 30 days, show formatted date
-  return date.toLocaleDateString('en-US', { 
-    year: 'numeric', 
-    month: 'short', 
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
     day: 'numeric',
     timeZone: 'UTC' // Display in UTC to match database
   })
@@ -283,33 +287,33 @@ export function validateWorkflowStage(stage: ApprovalStage): boolean {
 
 export function calculateWorkflowProgress(workflow: ApprovalWorkflow): number {
   if (workflow.stages.length === 0) return 0
-  
-  const completedStages = workflow.stages.filter(stage => 
+
+  const completedStages = workflow.stages.filter(stage =>
     stage.status === 'approved' || stage.status === 'skipped'
   ).length
-  
+
   return (completedStages / workflow.stages.length) * 100
 }
 
 export function getNextApprovers(workflow: ApprovalWorkflow): string[] {
   if (workflow.status !== 'in-progress') return []
-  
+
   const currentStage = workflow.stages[workflow.currentStage]
   if (!currentStage || currentStage.status !== 'pending') return []
-  
-  return currentStage.approvers.filter(approver => 
+
+  return currentStage.approvers.filter(approver =>
     !currentStage.currentApprovals.includes(approver)
   )
 }
 
 export function canUserApprove(workflow: ApprovalWorkflow, userId: string): boolean {
   if (workflow.status !== 'in-progress') return false
-  
+
   const currentStage = workflow.stages[workflow.currentStage]
   if (!currentStage || currentStage.status !== 'pending') return false
-  
-  return currentStage.approvers.includes(userId) && 
-         !currentStage.currentApprovals.includes(userId)
+
+  return currentStage.approvers.includes(userId) &&
+    !currentStage.currentApprovals.includes(userId)
 }
 
 export const mockTeamMembers: TeamMember[] = [

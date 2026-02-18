@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify
 from app.rulebook.rulebookendpoint import rulebook_blueprint
 from flask_cors import CORS
+from flask_compress import Compress
 from app.file_management.uploadpopup_api import process_api
 from app.file_management.process_onboarding import process_onboarding_bp
 from app.auth import auth_bp
 from app.file_management.file_management import file_bp
+from app.file_management.notifications import notifications_bp
 from app.discussion import discussion_bp
 from dotenv import load_dotenv
 import os
@@ -18,6 +20,8 @@ from app.center_of_excellence.process_registration import process_registration_b
 from app.center_of_excellence.download_apis import download_bp
 from app.center_of_excellence import update_stages
 from app.insert_bwi_data.insert_bwi_endpoint import insert_bwi_blueprint
+from app.file_management.RPA_User.Rpa_AssignTask import assignment_bp
+from app.file_management.RPA_User.pdd_upload import pdd_upload_bp
 
 load_dotenv()
 app = Flask(__name__)
@@ -26,6 +30,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise RuntimeError("SECRET_KEY is not set! Set it as an environment variable.")
+
+# ✅ Enable response compression for better performance
+Compress(app)
 
 # Configure CORS for frontend origins
 CORS(app, resources={
@@ -81,7 +88,8 @@ app.register_blueprint(rulebook_blueprint, url_prefix='/rulebook')
 app.register_blueprint(process_api)
 app.register_blueprint(process_onboarding_bp)
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
-app.register_blueprint(file_bp)
+app.register_blueprint(file_bp) 
+app.register_blueprint(notifications_bp)
 app.register_blueprint(discussion_bp)
 app.register_blueprint(user_bp)
 app.register_blueprint(team_assignment_bp)
@@ -92,5 +100,7 @@ app.register_blueprint(bots_bp)
 app.register_blueprint(process_registration_bp)
 app.register_blueprint(download_bp)
 app.register_blueprint(insert_bwi_blueprint)
+app.register_blueprint(assignment_bp)
+app.register_blueprint(pdd_upload_bp)
 if __name__ == "__main__":
     app.run('0.0.0.0', debug=False, port=8000)

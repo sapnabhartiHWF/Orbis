@@ -76,10 +76,12 @@ def insert_team_assignment_with_milestones(
 
 @team_assignment_bp.route("/api/insert-team-assignment", methods=["POST"])
 @token_required
-def insert_team_assignment_route(user_id, user_name):
+def insert_team_assignment_route():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     data = request.json
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova" if host != "https://orbis-icat.alphalogix.tech" else "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
 
     required_fields = [
         "Assignment_Name", "Priority", "Due_Date", "Estimated_Hours", "AssignedToIds", "Status"
@@ -180,11 +182,13 @@ def get_team_assignments(DBSCHEMA, assignment_id=None, status_filter=None):
 
 @team_assignment_bp.route("/api/get-team-assignments", methods=["GET"])
 @token_required
-def get_team_assignments_route(user_id, user_name):
+def get_team_assignments_route():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     assignment_id = request.args.get('assignmentId')
     status_filter = request.args.get('statusFilter')
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova" if host != "https://orbis-icat.alphalogix.tech" else "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
     
     try:
         assignment_id_int = int(assignment_id) if assignment_id else None
@@ -287,10 +291,12 @@ def update_milestone_status_options():
 
 @team_assignment_bp.route("/api/update-milestone-status", methods=["PUT"])
 @token_required
-def update_milestone_status_route(user_id, user_name):
+def update_milestone_status_route():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     data = request.json
-    host = request.headers.get("Origin")
-    DBSCHEMA = "santova" if host != "https://orbis-icat.alphalogix.tech" else "ICAT"
+    from app.utils.db_schema import get_db_schema
+    DBSCHEMA = get_db_schema()
 
     if "MilestoneId" not in data or "Status" not in data:
         return jsonify({"success": False, "message": "Missing MilestoneId or Status"}), 400

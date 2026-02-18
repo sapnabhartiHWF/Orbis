@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { createTicketFromException } from "@/utils/ticketExceptionIntegration"
+import { useNavigate } from "react-router-dom"
 
 // API Response Interface
 interface ApiException {
@@ -65,8 +66,8 @@ interface Exception {
   status: string
   severity: string
   description: string
-  impact: string
-  frequency: number
+  // impact: string
+  // frequency: number
   lastOccurrence: string
   resolution: string | null
   assignee: string
@@ -131,8 +132,8 @@ const fetchExceptions = async (): Promise<Exception[]> => {
         status: status,
         severity: severity,
         description: item.Message || "No description provided",
-        impact: "Process affected, requires attention",
-        frequency: 1, // Default frequency, can be calculated if API provides more data
+        // impact: "Process affected, requires attention",
+        // frequency: 1, // Default frequency, can be calculated if API provides more data
         lastOccurrence: lastOccurrence,
         resolution: status === "resolved" || status === "closed" ? "Resolved" : null,
         assignee: item.assgin_name || "Unassigned"
@@ -182,6 +183,7 @@ const exceptionPatterns = [
 ]
 
 export default function Exceptions() {
+  const navigate = useNavigate()
   const [exceptions, setExceptions] = useState<Exception[]>([])
   const [selectedException, setSelectedException] = useState<Exception | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -286,12 +288,15 @@ export default function Exceptions() {
   }
 
   const handleCreateTicket = () => {
-    if (!selectedException) return
-    const ticketData = createTicketFromException(selectedException)
-    toast({
-      title: "Ticket Created",
-      description: `Ticket created for exception ${selectedException.id}. Navigate to Tickets to view and manage.`
-    })
+    navigate("/tickets")
+  }
+
+  const handleRequestRuleChange = () => {
+    navigate("/rules")
+  }
+
+  const handleCreateAnalytics = () => {
+    navigate("/analytics")
   }
 
   // Calculate statistics from exceptions data
@@ -416,19 +421,19 @@ export default function Exceptions() {
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleCreateAnalytics}>
               <BarChart3 className="w-4 h-4" />
               Analytics
             </Button>
-            <Button className="bg-gradient-primary gap-2">
+            {/* <Button className="bg-gradient-primary gap-2">
               <Zap className="w-4 h-4" />
               Quick Actions
-            </Button>
+            </Button> */}
           </div>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -460,7 +465,7 @@ export default function Exceptions() {
             </CardContent>
           </Card>
           
-          <Card className="bg-gradient-card shadow-card">
+          {/* <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -474,7 +479,7 @@ export default function Exceptions() {
                 <CheckCircle2 className="w-8 h-8 text-success" />
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
           
           {/* <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-4">
@@ -654,7 +659,7 @@ export default function Exceptions() {
                 <>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Exception ID</span>
+                      <span className="text-sm text-muted-foreground">Ticket ID</span>
                       <span className="font-mono text-sm">{selectedException.id}</span>
                     </div>
                     
@@ -678,10 +683,10 @@ export default function Exceptions() {
                       <span className="text-sm">{selectedException.assignee}</span>
                     </div>
                     
-                    <div className="flex items-center justify-between">
+                    {/* <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Frequency (30d)</span>
                       <span className="text-sm font-semibold">{selectedException.frequency}x</span>
-                    </div>
+                    </div> */}
                   </div>
                   
                   <Separator />
@@ -690,13 +695,6 @@ export default function Exceptions() {
                     <h4 className="font-semibold text-sm">Description</h4>
                     <p className="text-sm text-muted-foreground">
                       {selectedException.description}
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-sm">Impact</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedException.impact}
                     </p>
                   </div>
                   
@@ -719,7 +717,12 @@ export default function Exceptions() {
                         <FileText className="w-4 h-4" />
                         Create Ticket
                       </Button>
-                      <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full justify-start gap-2"
+                        onClick={handleRequestRuleChange}
+                      >
                         <Settings className="w-4 h-4" />
                         Request Rule Change
                       </Button>

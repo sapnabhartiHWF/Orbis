@@ -27,7 +27,9 @@ def sanitize_filename(filename):
 
 @tickets_bp.route('/api/add_ticket', methods=['POST'])
 @token_required
-def add_ticket(user_id, user_name):
+def add_ticket():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Add a new ticket with optional file attachment.
     Uses user_id from JWT token for CreatedById.
@@ -38,10 +40,8 @@ def add_ticket(user_id, user_name):
     
     try:
         # Get DBSCHEMA from Origin header
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         # ✅ Handle multipart/form-data
         title = request.form.get("Title")
@@ -173,7 +173,9 @@ def add_ticket(user_id, user_name):
 
 @tickets_bp.route('/api/update_ticket', methods=['PUT'])
 @token_required
-def update_ticket(user_id, user_name):
+def update_ticket():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Update an existing ticket with optional file attachment.
     Uses user_id from JWT token for UpdatedById.
@@ -184,10 +186,8 @@ def update_ticket(user_id, user_name):
     
     try:
         # Get DBSCHEMA from Origin header
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         # ✅ Handle multipart/form-data
         tid = request.form.get("Tid")
@@ -410,7 +410,9 @@ def update_ticket(user_id, user_name):
 
 @tickets_bp.route('/api/get_tickets', methods=['GET'])
 @token_required
-def get_tickets(user_id, user_name):
+def get_tickets():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Get tickets. If Tid is provided, returns specific ticket, otherwise returns all tickets.
     """
@@ -419,10 +421,8 @@ def get_tickets(user_id, user_name):
     
     try:
         # Get DBSCHEMA from Origin header
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         tid = request.args.get("Tid")
 
@@ -478,15 +478,15 @@ def get_tickets(user_id, user_name):
 
 @tickets_bp.route('/api/delete_ticket', methods=['DELETE'])
 @token_required
-def delete_ticket(user_id, user_name):
+def delete_ticket():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     conn = None
     cursor = None
 
     try:
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         # ✅ Try reading JSON body
         data = request.get_json(silent=True)
@@ -525,7 +525,9 @@ def delete_ticket(user_id, user_name):
 
 @tickets_bp.route('/api/download_ticket_attachment', methods=['GET'])
 @token_required
-def download_ticket_attachment(user_id, user_name):
+def download_ticket_attachment():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Download a ticket attachment file.
     Expects 'path' query parameter with the file path.
@@ -537,10 +539,8 @@ def download_ticket_attachment(user_id, user_name):
     
     try:
         # Get DBSCHEMA from Origin header
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         file_path = request.args.get("path")
         if not file_path:
@@ -614,7 +614,9 @@ def download_ticket_attachment(user_id, user_name):
 
 @tickets_bp.route('/api/add_ticket_chat', methods=['POST'])
 @token_required
-def add_ticket_chat(user_id, user_name):
+def add_ticket_chat():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Add a chat message to a ticket.
     Uses user_id from JWT token for SendById.
@@ -624,10 +626,8 @@ def add_ticket_chat(user_id, user_name):
     
     try:
         # Get DBSCHEMA from Origin header
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         # Get request data
         data = request.get_json()
@@ -715,7 +715,9 @@ def add_ticket_chat(user_id, user_name):
 
 @tickets_bp.route('/api/get_ticket_chat', methods=['GET'])
 @token_required
-def get_ticket_chat(user_id, user_name):
+def get_ticket_chat():
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Get chat messages for a ticket.
     """
@@ -724,10 +726,8 @@ def get_ticket_chat(user_id, user_name):
     
     try:
         # Get DBSCHEMA from Origin header
-        host = request.headers.get("Origin")
-        DBSCHEMA = "santova"
-        if host == "https://orbis-icat.alphalogix.tech":
-            DBSCHEMA = "ICAT"
+        from app.utils.db_schema import get_db_schema
+        DBSCHEMA = get_db_schema()
 
         ticket_id = request.args.get("TicketId")
         if not ticket_id:
