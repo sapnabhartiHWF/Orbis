@@ -7,7 +7,7 @@
 import { toast } from "sonner";
 
 // API Base URL from environment (fallback to local dev)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://basic-vivyan-vivek1902-64809d2b.koyeb.app";
 
 // Global logout callback - set from AuthContext
 let globalLogoutCallback: (() => void) | null = null;

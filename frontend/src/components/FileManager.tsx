@@ -82,17 +82,17 @@ interface FileManagerProps {
 
 const fileTypes = ["all", "document", "video", "flowchart", "image"];
 const staticTags = ["demo", "current-state", "training"];
-const url = "http://127.0.0.1:8000/api/processes";
-const deleteUrl = "http://127.0.0.1:8000/api/delete-uploaded-file";
-const insertProcessUrl = "http://127.0.0.1:8000/api/insert_process";
-const notifyAutomationLeadUrl = "http://127.0.0.1:8000/api/notify-automation-lead";
+const url = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/processes";
+const deleteUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/delete-uploaded-file";
+const insertProcessUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/insert_process";
+const notifyAutomationLeadUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/notify-automation-lead";
 
 // Helper function to build the files API URL with bot_id from selected onboarding folder
 const getFilesUrl = (botId: string | number | null | undefined): string => {
   if (!botId) {
     throw new Error("botId is required to fetch files");
   }
-  return `http://127.0.0.1:8000/api/process/${botId}/file-management`;
+  return `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/process/${botId}/file-management`;
 };
 
 // Helper function to build the upload API URL with bot_id
@@ -100,7 +100,7 @@ const getUploadUrl = (botId: string | number | null | undefined): string => {
   if (!botId) {
     throw new Error("botId is required to upload files");
   }
-  return `http://127.0.0.1:8000/api/process/${botId}/file-management`;
+  return `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/process/${botId}/file-management`;
 };
 
 // Helper function to build the trigger API URL with bot_id
@@ -108,7 +108,7 @@ const getTriggerUrl = (botId: string | number | null | undefined, fileId: string
   if (!botId) {
     throw new Error("botId is required to trigger files");
   }
-  return `http://127.0.0.1:8000/api/process/${botId}/trigger-file/${fileId}`;
+  return `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/process/${botId}/trigger-file/${fileId}`;
 };
 
 // Helper function to get proper file type icon component (no colors, just icon)
@@ -295,7 +295,7 @@ export function FileManager({ processId, onFileCountsChange }: FileManagerProps)
       // Special case for Bot ID 2 (Bwi / Airline Details)
       // For this folder, we show the count of flight records from airline-details API
       if (botId === "2" || botId === 2) {
-        const res = await fetch(`http://127.0.0.1:8000/api/operations/airline-details?bot_id=2`, {
+        const res = await fetch(`https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/operations/airline-details?bot_id=2`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -1053,7 +1053,7 @@ export function FileManager({ processId, onFileCountsChange }: FileManagerProps)
       const token = localStorage.getItem("token");
 
       const response = await fetch(
-        `http://127.0.0.1:8000/api/download-file/${fileId}`,
+        `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/download-file/${fileId}`,
         {
           method: "GET",
           headers: {

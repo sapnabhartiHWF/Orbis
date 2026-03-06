@@ -23,7 +23,7 @@ export default function CollaborationHub() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const response = await fetch('http://127.0.0.1:8000/api/get-comment-count', {
+        const response = await fetch('https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/get-comment-count', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

@@ -39,7 +39,7 @@ export function NotificationBell() {
   //       return;
   //     }
 
-  //     const response = await fetch("http://127.0.0.1:8000/api/notifications", {
+  //     const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/notifications", {
   //       method: "GET",
   //       headers: {
   //         "Content-Type": "application/json",
@@ -83,7 +83,7 @@ export function NotificationBell() {
   //     if (!token) return;
 
   //     const response = await fetch(
-  //       "http://127.0.0.1:8000/api/notifications/mark-read",
+  //       "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/notifications/mark-read",
   //       {
   //         method: "POST",
   //         headers: {

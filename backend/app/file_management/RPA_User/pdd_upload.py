@@ -22,7 +22,9 @@ def allowed_pdd_file(filename):
 
 @pdd_upload_bp.route("/api/pdd/upload", methods=["POST"])
 @token_required
-def upload_pdd(user_id, user_name):
+def upload_pdd():
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     conn = None
     cursor = None
     try:
@@ -90,7 +92,9 @@ def upload_pdd(user_id, user_name):
 
 @pdd_upload_bp.route("/api/pdd/<int:file_id>", methods=["GET"])
 @token_required
-def get_pdd(user_id, user_name, file_id):
+def get_pdd(file_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     conn = None
     cursor = None
     try:
@@ -149,7 +153,9 @@ def get_pdd(user_id, user_name, file_id):
 
 @pdd_upload_bp.route("/api/pdd/<int:file_id>/assignment", methods=["GET"])
 @token_required
-def check_assignment(user_id, user_name, file_id):
+def check_assignment(file_id):
+    user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     conn = None
     cursor = None
     try:
@@ -192,7 +198,9 @@ def check_assignment(user_id, user_name, file_id):
 
 @pdd_upload_bp.route("/api/pdd/<int:file_id>/download", methods=["GET"])
 @token_required
-def download_pdd(user_id, user_name, file_id):
+def download_pdd(file_id):
+    # user_id = request.user.get("UserId")
+    # user_name = request.user.get("UserName")
     """
     Download PDD file. All users can download.
     """

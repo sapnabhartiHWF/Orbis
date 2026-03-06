@@ -77,7 +77,7 @@ export function FileReviewDialog({
         Remarks: remarks || undefined,
       };
 
-      const response = await fetch("http://127.0.0.1:8000/api/file-review", {
+      const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/file-review", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -146,7 +146,7 @@ export function FileReviewDialog({
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const response = await fetch("http://127.0.0.1:8000/api/rpa_users", {
+        const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/rpa_users", {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -208,7 +208,7 @@ export function FileReviewDialog({
           rpaEngineerId: engineerId,
         };
 
-        return fetch("http://127.0.0.1:8000/api/Rpa_taskAssignment", {
+        return fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/Rpa_taskAssignment", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

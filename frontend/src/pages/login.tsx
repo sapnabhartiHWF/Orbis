@@ -87,7 +87,7 @@ const LoginPage: React.FC = () => {
   const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData("text").trim();
-    
+
     if (/^\d{6}$/.test(pastedData)) {
       const newOtp = pastedData.split("").slice(0, 6);
       setOtp(newOtp);
@@ -117,6 +117,7 @@ const LoginPage: React.FC = () => {
       });
 
       const data = await res.json();
+
       setOtpLoading(false);
 
       if (!res.ok) {
@@ -138,7 +139,8 @@ const LoginPage: React.FC = () => {
         `${user.FirstName} ${user.LastName}`.trim()
       );
       localStorage.setItem("roleId", user.RoleId.toString());
-      
+      localStorage.setItem("roleName", user.RoleName);
+
       // Store company IDs and names from API response (or empty arrays if not present)
       const companyIds = user.CompanyIds || [];
       const companyNames = user.CompanyNames || [];

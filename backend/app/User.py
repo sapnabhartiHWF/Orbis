@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from app.Database.connection import connect_to_database  # your existing DB connection function    C:\sapna\HybridWorkforce_Projects\santova2\backend\Database\connection.py
+from app.Database.connection import connect_to_database
 from flask import request
 from app.auth_middleware import token_required
 
@@ -8,31 +8,35 @@ user_bp = Blueprint("user_bp", __name__)
 @user_bp.route("/api/users", methods=["GET"])
 @token_required
 def get_all_users():
-    # user_id = request.user.get("UserId")
-    # user_name = request.user.get("UserName")
-    """
-    Fetch all users from santova.SantovaUser via stored procedure.
-    """
+    assignable_only = request.args.get("assignable", "false").lower() == "true"
+
     from app.utils.db_schema import get_db_schema
     DBSCHEMA = get_db_schema()
+
     conn = connect_to_database()
     cursor = conn.cursor()
 
     try:
-        cursor.execute(f"EXEC {DBSCHEMA}.GetAllUser")
-        rows = cursor.fetchall()
+        sp_name = "GetRpaUser" if assignable_only else "GetAllUser"
+        cursor.execute(f"EXEC {DBSCHEMA}.{sp_name}")
 
-        # get column names
+        rows = cursor.fetchall()
         columns = [col[0] for col in cursor.description]
 
-        # convert each row to dict
         users = [dict(zip(columns, row)) for row in rows]
 
-        return jsonify({"success": True, "data": users}), 200
+        return jsonify({
+            "success": True,
+            "count": len(users),
+            "data": users
+        }), 200
 
     except Exception as e:
-        print("Error fetching users:", e)
-        return jsonify({"success": False, "message": str(e)}), 500
+        print("Error fetching users:", str(e))
+        return jsonify({
+            "success": False,
+            "message": "Failed to fetch users"
+        }), 500
 
     finally:
         cursor.close()

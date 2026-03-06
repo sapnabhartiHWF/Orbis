@@ -67,7 +67,7 @@ export function PDDUploadDialog({
       if (!token) return;
 
       const response = await fetch(
-        `http://127.0.0.1:8000/api/pdd/${fileId}`,
+        `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/pdd/${fileId}`,
         {
           method: "GET",
           headers: {
@@ -160,7 +160,7 @@ export function PDDUploadDialog({
       formData.append("fileId", fileId.toString());
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/pdd/upload",
+        "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/pdd/upload",
         {
           method: "POST",
           headers: {
@@ -214,7 +214,7 @@ export function PDDUploadDialog({
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/pdd/${fileId}/download`,
+        `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/pdd/${fileId}/download`,
         {
           method: "GET",
           headers: {

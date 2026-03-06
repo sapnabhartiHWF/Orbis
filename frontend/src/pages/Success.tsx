@@ -129,7 +129,7 @@ export default function Success() {
         if (!token) return;
 
         const response = await fetch(
-          `http://127.0.0.1:8000/api/process/${selectedBotId}/file-management?status=Done`,
+          `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/process/${selectedBotId}/file-management?status=Done`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -172,7 +172,7 @@ export default function Success() {
         if (!token) return;
 
         const response = await fetch(
-          `http://127.0.0.1:8000/api/operations/airline-details?bot_id=2`,
+          `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/operations/airline-details?bot_id=2`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -242,7 +242,7 @@ export default function Success() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const response = await fetch("http://127.0.0.1:8000/api/bots", {
+        const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/bots", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -300,7 +300,7 @@ export default function Success() {
       }
 
       const response = await fetch(
-        `http://127.0.0.1:8000/api/download-file/${file.FileID}`,
+        `https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/download-file/${file.FileID}`,
         {
           method: "GET",
           headers: {

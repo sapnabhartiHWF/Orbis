@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Call logout API if token exists
     if (token) {
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://basic-vivyan-vivek1902-64809d2b.koyeb.app";
         await fetch(`${API_BASE_URL}/api/auth/logout`, {
           method: "POST",
           headers: {
@@ -92,6 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('roleId');
     localStorage.removeItem('companyIds');
     localStorage.removeItem('companyNames');
+    localStorage.removeItem('roleName');
 
     setIsAuthenticated(false);
     setUser(null);

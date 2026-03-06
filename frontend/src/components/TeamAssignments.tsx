@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Link,
 } from "lucide-react";
 import {
   Card,
@@ -67,17 +68,29 @@ import {
   generateNotification,
 } from "@/utils/collaborationUtils";
 
+// ─────────────────────────────────────────────
+// Props
+// ─────────────────────────────────────────────
 interface TeamAssignmentsProps {
+  /** Numeric process ID e.g. "73" – passed from the approval redirect */
   processId?: string;
+  /** Human-readable process title from ProcessRegistration.Title */
+  processName?: string;
+  /** Department from ProcessRegistration.Department */
+  processDepartment?: string;
 }
 
+// ─────────────────────────────────────────────
 // API URLs
-const INSERT_ASSIGNMENT_URL =
-  "http://127.0.0.1:8000/api/insert-team-assignment";
-const GET_ASSIGNMENTS_URL = "http://127.0.0.1:8000/api/get-team-assignments";
-const UPDATE_MILESTONE_STATUS_URL = "http://127.0.0.1:8000/api/update-milestone-status";
-const GET_USERS_URL = "http://127.0.0.1:8000/api/users";
+// ─────────────────────────────────────────────
+const INSERT_ASSIGNMENT_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/insert-team-assignment";
+const GET_ASSIGNMENTS_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/get-team-assignments";
+const UPDATE_MILESTONE_STATUS_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/update-milestone-status";
+const GET_USERS_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/users?assignable=true";
 
+// ─────────────────────────────────────────────
+// Dummy notifications (kept as-is)
+// ─────────────────────────────────────────────
 const dummyNotifications: Notification[] = [
   {
     id: "n1",
@@ -112,245 +125,195 @@ const dummyNotifications: Notification[] = [
   },
 ];
 
+// ─────────────────────────────────────────────
+// Colour helpers
+// ─────────────────────────────────────────────
 const getPriorityColor = (priority: string) => {
   switch (priority) {
-    case "low":
-      return "bg-muted text-muted-foreground";
-    case "medium":
-      return "bg-warning/20 text-warning-foreground border-warning/30";
-    case "high":
-      return "bg-destructive/20 text-destructive-foreground border-destructive/30";
-    case "urgent":
-      return "bg-gradient-danger text-white border-destructive shadow-glow";
-    default:
-      return "bg-muted text-muted-foreground";
+    case "low": return "bg-muted text-muted-foreground";
+    case "medium": return "bg-warning/20 text-warning-foreground border-warning/30";
+    case "high": return "bg-destructive/20 text-destructive-foreground border-destructive/30";
+    case "urgent": return "bg-gradient-danger text-white border-destructive shadow-glow";
+    default: return "bg-muted text-muted-foreground";
   }
 };
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "assigned":
-      return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-    case "in-progress":
-      return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-    case "completed":
-      return "bg-success/20 text-success-foreground border-success/30";
-    case "overdue":
-      return "bg-destructive/20 text-destructive-foreground border-destructive/30";
-    default:
-      return "bg-muted text-muted-foreground";
+    case "assigned": return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+    case "in-progress": return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+    case "completed": return "bg-success/20 text-success-foreground border-success/30";
+    case "overdue": return "bg-destructive/20 text-destructive-foreground border-destructive/30";
+    default: return "bg-muted text-muted-foreground";
   }
 };
 
-export function TeamAssignments({ processId }: TeamAssignmentsProps) {
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [notifications, setNotifications] =
-    useState<Notification[]>(dummyNotifications);
+// ─────────────────────────────────────────────
+// Extended assignment shape (adds process fields)
+// ─────────────────────────────────────────────
+interface EnrichedAssignment extends Assignment {
+  processName?: string;
+  processDepartment?: string;
+  processPriority?: string;
+  progressPercent?: number;
+}
+
+// ─────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────
+export function TeamAssignments({
+  processId,
+  processName,
+  processDepartment,
+}: TeamAssignmentsProps) {
+  const [assignments, setAssignments] = useState<EnrichedAssignment[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>(dummyNotifications);
   const [isNewAssignmentOpen, setIsNewAssignmentOpen] = useState(false);
-  const [selectedTab, setSelectedTab] = useState("assignments");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [newAssignment, setNewAssignment] = useState({
     assignedTo: [] as string[],
-    assignedToIds: [] as number[], // Store user IDs for API
+    assignedToIds: [] as number[],
     description: "",
     priority: "medium" as Assignment["priority"],
     dueDate: "",
     estimatedHours: 0,
     milestones: [] as Partial<Milestone>[],
   });
-  const [expandedAssignment, setExpandedAssignment] = useState<string | null>(
-    null
-  );
+  const [expandedAssignment, setExpandedAssignment] = useState<string | null>(null);
   const [selectedMilestone, setSelectedMilestone] = useState<{
     assignmentId: string;
     milestoneId: string;
   } | null>(null);
   const [isMilestoneDialogOpen, setIsMilestoneDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [users, setUsers] = useState<any[]>([]); // Store users for mapping names to IDs
+  const [users, setUsers] = useState<any[]>([]);
 
-  // Map frontend status filter to backend format
+  // ── Status mapping helpers ──────────────────
   const mapStatusFilterToAPI = (filter: string): string | null => {
     if (filter === "all") return null;
     if (filter === "assigned") return "Assigned";
     if (filter === "in-progress") return "In Process";
     if (filter === "completed") return "Completed";
-    // For "overdue", we'll filter client-side since backend doesn't have this status
-    return null;
+    return null; // "overdue" is client-side only
   };
 
-  // Fetch assignments function
+  const mapStatus = (status: string) => {
+    const s = status.toLowerCase();
+    if (s.includes("process") || s.includes("progress")) return "in-progress";
+    if (s.includes("complete")) return "completed";
+    if (s.includes("overdue")) return "overdue";
+    if (s.includes("assign")) return "assigned";
+    return "assigned";
+  };
+
+  const mapPriority = (priority: string) => {
+    const p = priority.toLowerCase();
+    if (p === "high") return "high";
+    if (p === "medium") return "medium";
+    if (p === "low") return "low";
+    if (p === "urgent") return "urgent";
+    return "medium";
+  };
+
+  // ── Fetch assignments ───────────────────────
   const fetchAssignments = async (statusFilterParam?: string) => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
+      if (!token) { setIsLoading(false); return; }
 
-      // Build URL with statusFilter query parameter if provided
       let url = GET_ASSIGNMENTS_URL;
       const apiStatusFilter = statusFilterParam
         ? mapStatusFilterToAPI(statusFilterParam)
         : mapStatusFilterToAPI(statusFilter);
-
       if (apiStatusFilter) {
         url += `?statusFilter=${encodeURIComponent(apiStatusFilter)}`;
       }
 
       const response = await fetch(url, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch assignments");
-      }
+      if (!response.ok) throw new Error("Failed to fetch assignments");
 
       const data = await response.json();
-
       if (data.success && data.data) {
-        // Map API response to component format
-        const mappedAssignments: Assignment[] = data.data.map(
-          (apiAssignment: any) => {
-            // Map status from API to component format
-            const mapStatus = (status: string) => {
-              const lowerStatus = status.toLowerCase();
-              // Check for "In Process" - must check "process" first before "progress"
-              if (lowerStatus.includes("process") || lowerStatus.includes("progress")) return "in-progress";
-              if (lowerStatus.includes("complete")) return "completed";
-              if (lowerStatus.includes("assign")) return "assigned";
-              if (lowerStatus.includes("overdue")) return "overdue";
-              return "assigned";
-            };
+        const mapped: EnrichedAssignment[] = data.data.map((api: any) => {
+          const assignedToNames: string[] = api.AssignedToNames
+            ? api.AssignedToNames.split(", ").filter((n: string) => n.trim())
+            : [];
 
-            // Map priority from API to component format
-            const mapPriority = (priority: string) => {
-              const lowerPriority = priority.toLowerCase();
-              if (lowerPriority === "high") return "high";
-              if (lowerPriority === "medium") return "medium";
-              if (lowerPriority === "low") return "low";
-              if (lowerPriority === "urgent") return "urgent";
-              return "medium";
-            };
+          const milestones: Milestone[] = (api.Milestones || []).map((m: any) => ({
+            id: `m${m.MilestoneId}`,
+            title: m.Title || "",
+            description: m.Description || "",
+            dueDate: m.DueDate || "",
+            status: mapStatus(m.Status || "Assigned"),
+            completedAt: m.CompletedById
+              ? (m.UpdatedDate || m.CreatedDate)
+              : undefined,
+            completedBy: m.CompletedByName || undefined,
+          }));
 
-            // Parse assigned users from comma-separated string
-            const assignedToNames = apiAssignment.AssignedToNames
-              ? apiAssignment.AssignedToNames.split(", ").filter(
-                (name: string) => name.trim()
-              )
-              : [];
-
-            // Map milestones
-            const milestones: Milestone[] = (
-              apiAssignment.Milestones || []
-            ).map((apiMilestone: any) => {
-              const milestoneStatus = mapStatus(
-                apiMilestone.Status || "Assigned"
-              );
-              return {
-                id: `m${apiMilestone.MilestoneId}`,
-                title: apiMilestone.Title || "",
-                description: apiMilestone.Description || "",
-                dueDate: apiMilestone.DueDate || "",
-                status: milestoneStatus,
-                completedAt: apiMilestone.CompletedById
-                  ? (apiMilestone.UpdatedDate || apiMilestone.CreatedDate)
-                  : undefined,
-                completedBy: apiMilestone.CompletedByName || undefined,
-              };
-            });
-
-            return {
-              id: `a${apiAssignment.AssignmentId}`,
-              processId: processId || "P000",
-              assignedTo: assignedToNames,
-              assignedBy: apiAssignment.AssignedByUserName || "Unknown",
-              assignedAt: apiAssignment.CreatedDate || new Date().toISOString(),
-              dueDate: apiAssignment.Due_Date || "",
-              priority: mapPriority(apiAssignment.Priority || "Medium"),
-              status: mapStatus(apiAssignment.Status || "Assigned"),
-              description: apiAssignment.Assignment_Name || "",
-              estimatedHours: apiAssignment.Estimated_Hours || 0,
-              actualHours: undefined, // Not in API response
-              milestones: milestones,
-              progressPercent: apiAssignment.ProgressPercent || 0, // Use ProgressPercent from database (updated by triggers)
-            };
-          }
-        );
-
-        setAssignments(mappedAssignments);
+          return {
+            id: `a${api.AssignmentId}`,
+            // ── Process context from SP ──────────────────────────────────────
+            // Only use what the DB actually returned via the JOIN.
+            // Never fall back to nav-state props here — that would cause ALL
+            // old assignments (no Process_Id in DB) to inherit the current
+            // navigation context and show the wrong process pill.
+            processId: api.Process_Id
+              ? `P${String(api.Process_Id).padStart(3, "0")}`
+              : undefined,
+            processName: api.Title || undefined,
+            processDepartment: api.Department || undefined,
+            processPriority: api.Process_Priority || undefined,
+            // ── Assignment fields ────────────────────────────────────────────
+            assignedTo: assignedToNames,
+            assignedBy: api.AssignedByUserName || "Unknown",
+            assignedAt: api.CreatedDate || new Date().toISOString(),
+            dueDate: api.Due_Date || "",
+            priority: mapPriority(api.Priority || "Medium"),
+            status: mapStatus(api.Status || "Assigned"),
+            description: api.Assignment_Name || "",
+            estimatedHours: api.Estimated_Hours || 0,
+            actualHours: undefined,
+            milestones,
+            progressPercent: api.ProgressPercent || 0,
+          } as EnrichedAssignment;
+        });
+        setAssignments(mapped);
       }
     } catch (error: any) {
       console.error("Error fetching assignments:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch assignments",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to fetch assignments", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredAssignments = assignments.filter((assignment) => {
-    const matchesProcess = !processId || assignment.processId === processId;
-    // Status filtering is now done on the backend, but we still filter client-side for:
-    // 1. "overdue" status (not supported by backend)
-    // 2. Priority (not supported by backend)
+  // ── Filtered list ───────────────────────────
+  const filteredAssignments = assignments.filter((a) => {
     const matchesStatus =
       statusFilter === "all" ||
-      (statusFilter === "overdue" && assignment.status === "overdue") ||
-      (statusFilter !== "overdue" && assignment.status === statusFilter);
-    const matchesPriority =
-      priorityFilter === "all" || assignment.priority === priorityFilter;
-    return matchesProcess && matchesStatus && matchesPriority;
+      (statusFilter === "overdue" && a.status === "overdue") ||
+      (statusFilter !== "overdue" && a.status === statusFilter);
+    const matchesPriority = priorityFilter === "all" || a.priority === priorityFilter;
+    return matchesStatus && matchesPriority;
   });
 
+  // ── Create assignment ───────────────────────
   const handleCreateAssignment = async () => {
-    // Validate basic assignment fields
-    if (
-      !newAssignment.description ||
-      newAssignment.assignedToIds.length === 0
-    ) {
-      toast({
-        title: "Validation Error",
-        description:
-          "Please fill in all required fields and assign at least one team member.",
-        variant: "destructive",
-      });
+    if (!newAssignment.description || newAssignment.assignedToIds.length === 0) {
+      toast({ title: "Validation Error", description: "Please fill in all required fields and assign at least one team member.", variant: "destructive" });
       return;
     }
-
-    // Validate milestones - milestones are mandatory
-    if (newAssignment.milestones.length === 0) {
-      toast({
-        title: "Validation Error",
-        description:
-          "Please add at least one milestone. Milestones are required.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate milestones - all fields must be filled
-    const incompleteMilestones = newAssignment.milestones.filter(
-      (milestone) =>
-        !milestone.title || !milestone.dueDate || !milestone.description
+    const incomplete = newAssignment.milestones.filter(
+      (m) => !m.title || !m.dueDate || !m.description
     );
-
-    if (incompleteMilestones.length > 0) {
-      toast({
-        title: "Validation Error",
-        description:
-          "Please fill in all milestone fields (Title, Due Date, and Description) for all milestones.",
-        variant: "destructive",
-      });
+    if (incomplete.length > 0) {
+      toast({ title: "Validation Error", description: "Please fill in all milestone fields (Title, Due Date, and Description).", variant: "destructive" });
       return;
     }
 
@@ -358,60 +321,36 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        toast({
-          title: "Authentication Error",
-          description: "Please login to create assignments.",
-          variant: "destructive",
-        });
+        toast({ title: "Authentication Error", description: "Please login to create assignments.", variant: "destructive" });
         return;
       }
 
-      // Map priority to API format
-      const mapPriorityToAPI = (priority: string) => {
-        const capitalized =
-          priority.charAt(0).toUpperCase() + priority.slice(1);
-        return capitalized === "Urgent" ? "Urgent" : capitalized;
+      const mapPriorityToAPI = (p: string) =>
+        p.charAt(0).toUpperCase() + p.slice(1);
+
+      const formatDateForAPI = (d: string) => {
+        if (!d) return new Date().toISOString().split("T")[0];
+        if (d.match(/^\d{4}-\d{2}-\d{2}$/)) return d;
+        return new Date(d).toISOString().split("T")[0];
       };
 
-      // Map status to API format
-      const mapStatusToAPI = (status: string) => {
-        if (status === "assigned") return "Assigned";
-        if (status === "in-progress") return "In Progress";
-        if (status === "completed") return "Completed";
-        return "Assigned";
-      };
-
-      // Format milestones for API
-      const formattedMilestones = newAssignment.milestones.map((milestone) => {
-        // Format milestone due date (YYYY-MM-DD)
-        let milestoneDueDate =
-          milestone.dueDate || new Date().toISOString().split("T")[0];
-        if (
-          milestoneDueDate &&
-          !milestoneDueDate.match(/^\d{4}-\d{2}-\d{2}$/)
-        ) {
-          const date = new Date(milestoneDueDate);
-          milestoneDueDate = date.toISOString().split("T")[0];
-        }
-
+      const formattedMilestones = newAssignment.milestones.map((m) => {
+        let due = m.dueDate || new Date().toISOString().split("T")[0];
+        if (!due.match(/^\d{4}-\d{2}-\d{2}$/)) due = new Date(due).toISOString().split("T")[0];
         return {
-          Title: milestone.title || "",
-          Description: milestone.description || "",
-          DueDate: milestoneDueDate,
-          Status: "Assigned",  // Initial status when milestone is created
+          Title: m.title || "",
+          Description: m.description || "",
+          DueDate: due,
+          Status: "Assigned",
           Progress: "0%",
         };
       });
 
-      // Format date for API (YYYY-MM-DD)
-      const formatDateForAPI = (dateString: string) => {
-        if (!dateString) return new Date().toISOString().split("T")[0];
-        // If already in YYYY-MM-DD format, return as is
-        if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) return dateString;
-        // Otherwise try to parse and format
-        const date = new Date(dateString);
-        return date.toISOString().split("T")[0];
-      };
+      // ── Key change: send Process_Id as integer to backend ──────────────────
+      // processId prop is e.g. "73" or "P073" – strip the "P" prefix if present
+      const numericProcessId = processId
+        ? parseInt(processId.replace(/^P0*/i, ""), 10) || null
+        : null;
 
       const requestBody = {
         Assignment_Name: newAssignment.description,
@@ -419,323 +358,181 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
         Due_Date: formatDateForAPI(newAssignment.dueDate),
         Estimated_Hours: newAssignment.estimatedHours || 0,
         AssignedToIds: newAssignment.assignedToIds,
-        Status: mapStatusToAPI("assigned"),
+        Status: "Assigned",
         ProgressPercent: 0.0,
         Milestones: formattedMilestones,
+        // ── Process link ──────────────────────────────────────────────────────
+        Process_Id: numericProcessId,   // maps to @Process_Id in SP
       };
 
       const response = await fetch(INSERT_ASSIGNMENT_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(requestBody),
       });
-
       const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Failed to create assignment");
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to create assignment");
-      }
-
-      // Generate notifications for assigned team members
+      // Generate notifications for assigned members
       newAssignment.assignedTo.forEach((member) => {
         const notification = generateNotification("assignment", {
           recipient: member,
           sender: localStorage.getItem("userName") || "Current User",
           title: "New Assignment",
-          message: `You have been assigned to work on: ${newAssignment.description}`,
+          message: `You have been assigned to work on: ${newAssignment.description}${processName ? ` (Process: ${processId} — ${processName})` : ""
+            }`,
           actionUrl: "/center-of-excellence",
         });
         setNotifications((prev) => [...prev, notification]);
       });
 
       setIsNewAssignmentOpen(false);
-      setNewAssignment({
-        assignedTo: [],
-        assignedToIds: [],
-        description: "",
-        priority: "medium",
-        dueDate: "",
-        estimatedHours: 0,
-        milestones: [],
-      });
-
-      // Refresh assignments list
+      setNewAssignment({ assignedTo: [], assignedToIds: [], description: "", priority: "medium", dueDate: "", estimatedHours: 0, milestones: [] });
       await fetchAssignments();
 
-      toast({
-        title: "Assignment created! 👥",
-        description: `${newAssignment.assignedTo.length} team member(s) have been notified of their new assignment.`,
-      });
+      toast({ title: "Assignment created! 👥", description: `${newAssignment.assignedTo.length} team member(s) have been notified.` });
     } catch (error: any) {
       console.error("Error creating assignment:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create assignment",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to create assignment", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleMilestoneInProcess = async (
-    assignmentId: string,
-    milestoneId: string
-  ) => {
+  // ── Milestone handlers ──────────────────────
+  const handleMilestoneInProcess = async (assignmentId: string, milestoneId: string) => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        toast({
-          title: "Authentication Error",
-          description: "Please login to update milestones.",
-          variant: "destructive",
-        });
-        return;
-      }
+      if (!token) { toast({ title: "Authentication Error", description: "Please login.", variant: "destructive" }); return; }
 
-      // Extract numeric milestone ID from string like "m123"
       const numericMilestoneId = parseInt(milestoneId.replace("m", ""));
-
       const response = await fetch(UPDATE_MILESTONE_STATUS_URL, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          MilestoneId: numericMilestoneId,
-          Status: "In Process",
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ MilestoneId: numericMilestoneId, Status: "In Process" }),
       });
-
       const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Failed to update milestone status");
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to update milestone status");
-      }
-
-      // Refetch assignments to get updated progress and status from database
       await fetchAssignments();
-
-      toast({
-        title: "Task in process! 🚀",
-        description: "The milestone has been marked as in progress.",
-      });
+      toast({ title: "Task in process! 🚀", description: "The milestone has been marked as in progress." });
     } catch (error: any) {
       console.error("Error updating milestone status:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update milestone status",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to update milestone status", variant: "destructive" });
     }
   };
 
-  const handleMilestoneComplete = async (
-    assignmentId: string,
-    milestoneId: string
-  ) => {
+  const handleMilestoneComplete = async (assignmentId: string, milestoneId: string) => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        toast({
-          title: "Authentication Error",
-          description: "Please login to update milestones.",
-          variant: "destructive",
-        });
-        return;
-      }
+      if (!token) { toast({ title: "Authentication Error", description: "Please login.", variant: "destructive" }); return; }
 
-      // Find the current milestone status before updating
-      const currentAssignment = assignments.find((a) => a.id === assignmentId);
-      const currentMilestone = currentAssignment?.milestones.find(
-        (m) => m.id === milestoneId
-      );
-      const wasCompleted = currentMilestone?.status === "completed";
-
-      // Extract numeric milestone ID from string like "m123"
+      const current = assignments.find((a) => a.id === assignmentId);
+      const milestone = current?.milestones.find((m) => m.id === milestoneId);
+      const wasCompleted = milestone?.status === "completed";
       const numericMilestoneId = parseInt(milestoneId.replace("m", ""));
-
-      // Determine new status
       const newStatus = wasCompleted ? "In Process" : "Completed";
 
       const response = await fetch(UPDATE_MILESTONE_STATUS_URL, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          MilestoneId: numericMilestoneId,
-          Status: newStatus,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ MilestoneId: numericMilestoneId, Status: newStatus }),
       });
-
       const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Failed to update milestone status");
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to update milestone status");
-      }
-
-      // Refetch assignments to get updated progress and status from database
-      // The triggers will have updated the assignment status and progress automatically
       await fetchAssignments();
-
       toast({
-        title: wasCompleted
-          ? "Milestone marked incomplete! 🔄"
-          : "Milestone completed! ✅",
-        description: wasCompleted
-          ? "The milestone has been marked as in-progress."
-          : "Great progress! The milestone has been marked as complete.",
+        title: wasCompleted ? "Milestone marked incomplete! 🔄" : "Milestone completed! ✅",
+        description: wasCompleted ? "The milestone has been marked as in-progress." : "Great progress!",
       });
     } catch (error: any) {
       console.error("Error updating milestone status:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update milestone status",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to update milestone status", variant: "destructive" });
     }
   };
 
   const handleAssignmentComplete = (assignmentId: string) => {
-    const currentAssignment = assignments.find((a) => a.id === assignmentId);
-    const wasCompleted = currentAssignment?.status === "completed";
-
-    setAssignments((prev) => {
-      return prev.map((assignment) => {
-        if (assignment.id === assignmentId) {
-          return {
-            ...assignment,
-            status: wasCompleted
-              ? ("assigned" as const)
-              : ("completed" as const),
-          };
-        }
-        return assignment;
-      });
-    });
-
+    const current = assignments.find((a) => a.id === assignmentId);
+    const wasCompleted = current?.status === "completed";
+    setAssignments((prev) =>
+      prev.map((a) =>
+        a.id === assignmentId
+          ? { ...a, status: wasCompleted ? ("assigned" as const) : ("completed" as const) }
+          : a
+      )
+    );
     toast({
-      title: wasCompleted
-        ? "Assignment marked incomplete! 🔄"
-        : "Assignment completed! ✅",
-      description: wasCompleted
-        ? "The assignment has been marked as assigned."
-        : "Great work! The assignment has been marked as complete.",
+      title: wasCompleted ? "Assignment marked incomplete! 🔄" : "Assignment completed! ✅",
+      description: wasCompleted ? "The assignment has been marked as assigned." : "Great work!",
     });
   };
 
-  const addMilestone = () => {
+  // ── Milestone CRUD helpers ──────────────────
+  const addMilestone = () =>
     setNewAssignment((prev) => ({
       ...prev,
-      milestones: [
-        ...prev.milestones,
-        {
-          title: "",
-          description: "",
-          dueDate: "",
-          status: "assigned" as const,
-        },
-      ],
+      milestones: [...prev.milestones, { title: "", description: "", dueDate: "", status: "assigned" as const }],
     }));
-  };
 
-  const updateMilestone = (index: number, field: string, value: any) => {
+  const updateMilestone = (index: number, field: string, value: any) =>
     setNewAssignment((prev) => ({
       ...prev,
-      milestones: prev.milestones.map((milestone, i) =>
-        i === index ? { ...milestone, [field]: value } : milestone
-      ),
+      milestones: prev.milestones.map((m, i) => (i === index ? { ...m, [field]: value } : m)),
     }));
-  };
 
-  const removeMilestone = (index: number) => {
-    setNewAssignment((prev) => ({
-      ...prev,
-      milestones: prev.milestones.filter((_, i) => i !== index),
-    }));
-  };
+  const removeMilestone = (index: number) =>
+    setNewAssignment((prev) => ({ ...prev, milestones: prev.milestones.filter((_, i) => i !== index) }));
 
-  // Fetch users for dropdown
+  // ── Fetch users ─────────────────────────────
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
-
       const response = await fetch(GET_USERS_URL, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch users");
-      }
-
+      if (!response.ok) throw new Error("Failed to fetch users");
       const data = await response.json();
-      if (data.success && data.data) {
-        setUsers(data.data);
-      }
+      if (data.success && data.data) setUsers(data.data);
     } catch (error: any) {
       console.error("Error fetching users:", error);
     }
   };
 
-  // Fetch assignments on mount and when statusFilter changes
+  // ── Effects ─────────────────────────────────
   useEffect(() => {
     fetchAssignments();
     fetchUsers();
   }, []);
 
-  // Refetch assignments when statusFilter changes (for backend filtering)
   useEffect(() => {
-    // Only refetch if statusFilter is not "overdue" (which is client-side only)
-    // When statusFilter is "all", "assigned", "in-progress", or "completed",
-    // we refetch from backend with the appropriate filter
-    if (statusFilter !== "overdue") {
-      fetchAssignments();
-    }
-    // Note: fetchAssignments uses statusFilter from closure, which is fine
-    // since we're explicitly checking it here before calling
+    if (statusFilter !== "overdue") fetchAssignments();
   }, [statusFilter]);
 
-  // Update team member selection to use user IDs
-  const handleUserSelect = (userId: number, userName: string) => {
-    if (!newAssignment.assignedToIds.includes(userId)) {
-      setNewAssignment((prev) => ({
-        ...prev,
-        assignedTo: [...prev.assignedTo, userName],
-        assignedToIds: [...prev.assignedToIds, userId],
-      }));
+  // ── Auto-open Create Assignment modal when redirected from an approval ──
+  // processId + processName props are only set when CenterOfExcellence
+  // receives location.state from RPALeadProfile after triage approval.
+  // Fires once on mount since props are stable from the parent render.
+  useEffect(() => {
+    if (processId && processName) {
+      setIsNewAssignmentOpen(true);
     }
-  };
-
-  const handleUserRemove = (userId: number, userName: string) => {
-    setNewAssignment((prev) => ({
-      ...prev,
-      assignedTo: prev.assignedTo.filter((name) => name !== userName),
-      assignedToIds: prev.assignedToIds.filter((id) => id !== userId),
-    }));
-  };
+  }, [processId, processName]);
 
   const unreadNotifications = notifications.filter((n) => !n.read).length;
 
+  // ─────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-2xl font-semibold">Team Assignments</h3>
-          <p className="text-muted-foreground">
-            Manage team assignments and track progress
-          </p>
+          <p className="text-muted-foreground">Manage team assignments and track progress</p>
         </div>
 
         <div className="flex gap-2">
@@ -749,10 +546,8 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
             )}
           </Button>
 
-          <Dialog
-            open={isNewAssignmentOpen}
-            onOpenChange={setIsNewAssignmentOpen}
-          >
+          {/* ── Create Assignment Dialog ── */}
+          <Dialog open={isNewAssignmentOpen} onOpenChange={setIsNewAssignmentOpen}>
             <DialogTrigger asChild>
               <Button className="bg-gradient-primary text-primary-foreground hover:shadow-glow">
                 <UserPlus className="w-4 h-4 mr-2" />
@@ -768,19 +563,32 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
               </DialogHeader>
 
               <div className="space-y-6">
-                {/* Basic Assignment Info */}
+                {/* ── Linked Process Banner (shown when opened from an approval) ── */}
+                {processId && processName && (
+                  <div className="flex items-center gap-3 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                    <Link className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Linked Process</p>
+                      <p className="text-sm font-semibold text-purple-300">
+                        {processId} — {processName}
+                        {processDepartment && (
+                          <span className="text-muted-foreground font-normal ml-1">
+                            · {processDepartment}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Basic fields ── */}
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Assignment Description</Label>
                     <Textarea
                       placeholder="Describe what needs to be done..."
                       value={newAssignment.description}
-                      onChange={(e) =>
-                        setNewAssignment((prev) => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => setNewAssignment((prev) => ({ ...prev, description: e.target.value }))}
                     />
                   </div>
 
@@ -790,15 +598,10 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                       <Select
                         value={newAssignment.priority}
                         onValueChange={(value: Assignment["priority"]) =>
-                          setNewAssignment((prev) => ({
-                            ...prev,
-                            priority: value,
-                          }))
+                          setNewAssignment((prev) => ({ ...prev, priority: value }))
                         }
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="low">Low</SelectItem>
                           <SelectItem value="medium">Medium</SelectItem>
@@ -813,12 +616,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                       <Input
                         type="date"
                         value={newAssignment.dueDate}
-                        onChange={(e) =>
-                          setNewAssignment((prev) => ({
-                            ...prev,
-                            dueDate: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setNewAssignment((prev) => ({ ...prev, dueDate: e.target.value }))}
                       />
                     </div>
 
@@ -829,32 +627,23 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                         placeholder="40"
                         value={newAssignment.estimatedHours}
                         onChange={(e) =>
-                          setNewAssignment((prev) => ({
-                            ...prev,
-                            estimatedHours: parseInt(e.target.value) || 0,
-                          }))
+                          setNewAssignment((prev) => ({ ...prev, estimatedHours: parseInt(e.target.value) || 0 }))
                         }
                       />
                     </div>
                   </div>
 
-                  {/* Team Members Selection */}
+                  {/* ── Team member selection ── */}
                   <div className="space-y-2">
                     <Label>Assign to Team Members</Label>
                     <Select
                       onValueChange={(value) => {
                         const userId = parseInt(value);
                         const user = users.find((u) => u.UserId === userId);
-                        if (
-                          user &&
-                          !newAssignment.assignedToIds.includes(userId)
-                        ) {
+                        if (user && !newAssignment.assignedToIds.includes(userId)) {
                           setNewAssignment((prev) => ({
                             ...prev,
-                            assignedTo: [
-                              ...prev.assignedTo,
-                              `${user.FirstName} ${user.LastName}`.trim(),
-                            ],
+                            assignedTo: [...prev.assignedTo, `${user.FirstName} ${user.LastName}`.trim()],
                             assignedToIds: [...prev.assignedToIds, userId],
                           }));
                         }
@@ -866,31 +655,25 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                       <SelectContent>
                         {users.length > 0 ? (
                           users.map((user) => {
-                            const fullName =
-                              `${user.FirstName} ${user.LastName}`.trim();
+                            const fullName = `${user.FirstName} ${user.LastName}`.trim();
                             return (
-                              <SelectItem
-                                key={user.UserId}
-                                value={user.UserId.toString()}
-                              >
+                              <SelectItem key={user.UserId} value={user.UserId.toString()}>
                                 <div className="flex items-center gap-2">
                                   <Avatar className="w-5 h-5">
                                     <AvatarFallback className="text-xs">
-                                      {fullName
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
+                                      {fullName.split(" ").map((n: string) => n[0]).join("")}
                                     </AvatarFallback>
                                   </Avatar>
                                   <span>{fullName}</span>
+                                  {user.RoleName && (
+                                    <span className="text-xs text-muted-foreground ml-1">· {user.RoleName}</span>
+                                  )}
                                 </div>
                               </SelectItem>
                             );
                           })
                         ) : (
-                          <SelectItem value="loading" disabled>
-                            Loading users...
-                          </SelectItem>
+                          <SelectItem value="loading" disabled>Loading users...</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
@@ -898,27 +681,17 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                     {newAssignment.assignedTo.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
                         {newAssignment.assignedTo.map((member, index) => (
-                          <Badge
-                            key={`${member}-${index}`}
-                            variant="secondary"
-                            className="text-sm"
-                          >
+                          <Badge key={`${member}-${index}`} variant="secondary" className="text-sm">
                             {member}
                             <button
                               className="ml-1 hover:text-destructive"
-                              onClick={() => {
-                                const userId =
-                                  newAssignment.assignedToIds[index];
+                              onClick={() =>
                                 setNewAssignment((prev) => ({
                                   ...prev,
-                                  assignedTo: prev.assignedTo.filter(
-                                    (_, i) => i !== index
-                                  ),
-                                  assignedToIds: prev.assignedToIds.filter(
-                                    (_, i) => i !== index
-                                  ),
-                                }));
-                              }}
+                                  assignedTo: prev.assignedTo.filter((_, i) => i !== index),
+                                  assignedToIds: prev.assignedToIds.filter((_, i) => i !== index),
+                                }))
+                              }
                             >
                               ×
                             </button>
@@ -929,11 +702,11 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                   </div>
                 </div>
 
-                {/* Milestones */}
+                {/* ── Milestones ── */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <Label className="text-base font-medium">
-                      Milestones <span className="text-destructive">*</span>
+                      Milestones
                     </Label>
                     <Button size="sm" onClick={addMilestone}>
                       <Plus className="w-3 h-3 mr-1" />
@@ -946,65 +719,32 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <h4 className="font-medium">Milestone {index + 1}</h4>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeMilestone(index)}
-                          >
-                            ×
-                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => removeMilestone(index)}>×</Button>
                         </div>
-
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>
-                              Title <span className="text-destructive">*</span>
-                            </Label>
+                            <Label>Title </Label>
                             <Input
                               placeholder="e.g., Requirements Analysis"
                               value={milestone.title || ""}
-                              onChange={(e) =>
-                                updateMilestone(index, "title", e.target.value)
-                              }
-                              required
+                              onChange={(e) => updateMilestone(index, "title", e.target.value)}
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>
-                              Due Date{" "}
-                              <span className="text-destructive">*</span>
-                            </Label>
+                            <Label>Due Date </Label>
                             <Input
                               type="date"
                               value={milestone.dueDate || ""}
-                              onChange={(e) =>
-                                updateMilestone(
-                                  index,
-                                  "dueDate",
-                                  e.target.value
-                                )
-                              }
-                              required
+                              onChange={(e) => updateMilestone(index, "dueDate", e.target.value)}
                             />
                           </div>
                         </div>
-
                         <div className="space-y-2">
-                          <Label>
-                            Description{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
+                          <Label>Description </Label>
                           <Input
                             placeholder="What needs to be accomplished in this milestone?"
                             value={milestone.description || ""}
-                            onChange={(e) =>
-                              updateMilestone(
-                                index,
-                                "description",
-                                e.target.value
-                              )
-                            }
-                            required
+                            onChange={(e) => updateMilestone(index, "description", e.target.value)}
                           />
                         </div>
                       </CardContent>
@@ -1014,38 +754,21 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                   {newAssignment.milestones.length === 0 && (
                     <div className="text-center py-6 text-muted-foreground">
                       <Target className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-destructive font-medium">
-                        At least one milestone is required
-                      </p>
-                      <p className="text-sm mt-1">
-                        Click "Add Milestone" to add a milestone
-                      </p>
+                      <p className="text-sm mt-1">No milestones added. Click "Add Milestone" to add milestones (optional)</p>
                     </div>
                   )}
                 </div>
               </div>
 
               <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsNewAssignmentOpen(false)}
-                >
-                  Cancel
-                </Button>
+                <Button variant="outline" onClick={() => setIsNewAssignmentOpen(false)}>Cancel</Button>
                 <Button
                   onClick={handleCreateAssignment}
                   disabled={
                     !newAssignment.description ||
                     newAssignment.assignedTo.length === 0 ||
                     isLoading ||
-                    newAssignment.milestones.length === 0 ||
-                    (newAssignment.milestones.length > 0 &&
-                      newAssignment.milestones.some(
-                        (milestone) =>
-                          !milestone.title ||
-                          !milestone.dueDate ||
-                          !milestone.description
-                      ))
+                    newAssignment.milestones.some((m) => !m.title || !m.dueDate || !m.description)
                   }
                 >
                   {isLoading ? "Creating..." : "Create Assignment"}
@@ -1056,7 +779,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* ── Filters ── */}
       <Card className="bg-card border-border shadow-card">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
@@ -1064,11 +787,8 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
               <Filter className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Filters:</span>
             </div>
-
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="assigned">Assigned</SelectItem>
@@ -1077,11 +797,8 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                 <SelectItem value="overdue">Overdue</SelectItem>
               </SelectContent>
             </Select>
-
             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Priority" />
-              </SelectTrigger>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Priority" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Priority</SelectItem>
                 <SelectItem value="low">Low</SelectItem>
@@ -1094,7 +811,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
         </CardContent>
       </Card>
 
-      {/* Assignments List */}
+      {/* ── Assignment list ── */}
       {isLoading ? (
         <Card className="bg-card border-border shadow-card">
           <CardContent className="p-12 text-center">
@@ -1106,9 +823,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
           <CardContent className="p-12 text-center">
             <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h4 className="font-medium mb-2">No assignments found</h4>
-            <p className="text-muted-foreground mb-4">
-              Create your first team assignment to get started
-            </p>
+            <p className="text-muted-foreground mb-4">Create your first team assignment to get started</p>
             <Button onClick={() => setIsNewAssignmentOpen(true)}>
               <UserPlus className="w-4 h-4 mr-2" />
               Create Assignment
@@ -1118,71 +833,57 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
       ) : (
         <div className="space-y-6">
           {filteredAssignments.map((assignment) => {
-            const completedMilestones = assignment.milestones.filter(
-              (m) => m.status === "completed"
-            ).length;
-            // Use ProgressPercent from database (updated by triggers) if available,
-            // otherwise calculate from completed milestones
+            const completedMilestones = assignment.milestones.filter((m) => m.status === "completed").length;
             const progressPercentage =
-              (assignment as any).progressPercent !== undefined
-                ? (assignment as any).progressPercent
+              assignment.progressPercent !== undefined
+                ? assignment.progressPercent
                 : assignment.milestones.length > 0
                   ? (completedMilestones / assignment.milestones.length) * 100
                   : 0;
-
             const isExpanded = expandedAssignment === assignment.id;
 
             return (
-              <Card
-                key={assignment.id}
-                className="bg-gradient-card border-border shadow-card"
-              >
+              <Card key={assignment.id} className="bg-gradient-card border-border shadow-card">
                 <CardHeader
                   className="cursor-pointer hover:bg-muted/30 transition-colors"
-                  onClick={() =>
-                    setExpandedAssignment(isExpanded ? null : assignment.id)
-                  }
+                  onClick={() => setExpandedAssignment(isExpanded ? null : assignment.id)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge
-                          className={getPriorityColor(assignment.priority)}
-                        >
-                          {assignment.priority.charAt(0).toUpperCase() +
-                            assignment.priority.slice(1)}
+                      {/* ── Badges row ── */}
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <Badge className={getPriorityColor(assignment.priority)}>
+                          {assignment.priority.charAt(0).toUpperCase() + assignment.priority.slice(1)}
                         </Badge>
                         <Badge className={getStatusColor(assignment.status)}>
                           {assignment.status === "in-progress"
                             ? "In Progress"
-                            : assignment.status.charAt(0).toUpperCase() +
-                            assignment.status.slice(1)}
+                            : assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
                         </Badge>
                       </div>
 
                       <div className="flex items-center gap-2 mb-2">
-                        {/* {assignment.milestones.length === 0 && (
-                          <Button
-                            size="sm"
-                            variant={assignment.status === 'completed' ? 'default' : 'outline'}
-                            className={
-                              assignment.status === 'completed' 
-                                ? 'h-8 w-8 p-0 bg-success text-success-foreground hover:bg-success/90' 
-                                : 'h-8 w-8 p-0 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30'
-                            }
-                            title="Mark as Complete"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAssignmentComplete(assignment.id)
-                            }}
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                          </Button>
-                        )} */}
-                        <CardTitle className="text-lg flex-1">
-                          {assignment.description}
-                        </CardTitle>
+                        <CardTitle className="text-lg flex-1">{assignment.description}</CardTitle>
                       </div>
+
+                      {/* ── Process context (from SP: Title + Department) ── */}
+                      {assignment.processName && (
+                        <div className="mb-2 p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Process</span>
+                          </div>
+                          <div className="mt-1">
+                            <span className="text-sm font-semibold text-foreground">
+                              {assignment.processId} — {assignment.processName}
+                            </span>
+                            {assignment.processDepartment && (
+                              <span className="text-sm text-muted-foreground ml-2">
+                                · {assignment.processDepartment}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex items-center gap-6 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
@@ -1191,30 +892,22 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
-                          Due:{" "}
-                          {new Date(
-                            assignment.dueDate || ""
-                          ).toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                          Due: {new Date(assignment.dueDate || "").toLocaleDateString("en-US", { timeZone: "UTC" })}
                         </div>
-                        {assignment.estimatedHours && (
+                        {assignment.estimatedHours ? (
                           <div className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
                             {assignment.estimatedHours}h estimated
-                            {assignment.actualHours &&
-                              ` (${assignment.actualHours}h actual)`}
+                            {assignment.actualHours && ` (${assignment.actualHours}h actual)`}
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="text-right flex items-start gap-3">
                       <div>
-                        <div className="text-sm text-muted-foreground">
-                          Progress
-                        </div>
-                        <div className="text-2xl font-bold">
-                          {Math.round(progressPercentage)}%
-                        </div>
+                        <div className="text-sm text-muted-foreground">Progress</div>
+                        <div className="text-2xl font-bold">{Math.round(progressPercentage)}%</div>
                       </div>
                       <Button
                         variant="ghost"
@@ -1222,177 +915,150 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                         className="mt-1"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setExpandedAssignment(
-                            isExpanded ? null : assignment.id
-                          );
+                          setExpandedAssignment(isExpanded ? null : assignment.id);
                         }}
                       >
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Additional Assignment Info - Show when expanded */}
+                  {/* ── Expanded details ── */}
                   {isExpanded && (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-muted/20 rounded-lg border border-border">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <Calendar className="w-4 h-4 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">
-                            Assigned Date
-                          </p>
+                          <p className="text-xs text-muted-foreground">Assigned Date</p>
                         </div>
                         <p className="text-sm font-medium">
-                          {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('en-US', { timeZone: 'UTC' }) : 'N/A'}
+                          {assignment.assignedAt
+                            ? new Date(assignment.assignedAt).toLocaleDateString("en-US", { timeZone: "UTC" })
+                            : "N/A"}
                         </p>
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <Users className="w-4 h-4 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">
-                            Assigned By
-                          </p>
+                          <p className="text-xs text-muted-foreground">Assigned By</p>
                         </div>
-                        <p className="text-sm font-medium">
-                          {assignment.assignedBy}
-                        </p>
+                        <p className="text-sm font-medium">{assignment.assignedBy}</p>
                       </div>
-                      {assignment.estimatedHours && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <Clock className="w-4 h-4 text-muted-foreground" />
-                            <p className="text-xs text-muted-foreground">
-                              Estimated Hours
-                            </p>
-                          </div>
-                          <p className="text-sm font-medium">
-                            {assignment.estimatedHours}h
+
+                      {/* ── Process detail in expanded view ── */}
+                      {assignment.processName && (
+                        <div className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Process</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {assignment.processId} — {assignment.processName}
+                            {assignment.processDepartment && (
+                              <span className="text-muted-foreground ml-2">
+                                · {assignment.processDepartment}
+                              </span>
+                            )}
                           </p>
                         </div>
                       )}
-                      {assignment.actualHours && (
+                      {assignment.processPriority && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground">Process Priority</p>
+                          </div>
+                          <Badge className={getPriorityColor(assignment.processPriority.toLowerCase())}>
+                            {assignment.processPriority}
+                          </Badge>
+                        </div>
+                      )}
+
+                      {assignment.estimatedHours ? (
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <Clock className="w-4 h-4 text-muted-foreground" />
-                            <p className="text-xs text-muted-foreground">
-                              Actual Hours
-                            </p>
+                            <p className="text-xs text-muted-foreground">Estimated Hours</p>
                           </div>
-                          <p className="text-sm font-medium">
-                            {assignment.actualHours}h
-                          </p>
+                          <p className="text-sm font-medium">{assignment.estimatedHours}h</p>
                         </div>
-                      )}
+                      ) : null}
+                      {assignment.actualHours ? (
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground">Actual Hours</p>
+                          </div>
+                          <p className="text-sm font-medium">{assignment.actualHours}h</p>
+                        </div>
+                      ) : null}
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <Target className="w-4 h-4 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">
-                            Total Milestones
-                          </p>
+                          <p className="text-xs text-muted-foreground">Total Milestones</p>
                         </div>
-                        <p className="text-sm font-medium">
-                          {assignment.milestones.length}
-                        </p>
+                        <p className="text-sm font-medium">{assignment.milestones.length}</p>
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">
-                            Completed Milestones
-                          </p>
+                          <p className="text-xs text-muted-foreground">Completed Milestones</p>
                         </div>
-                        <p className="text-sm font-medium">
-                          {completedMilestones}
-                        </p>
+                        <p className="text-sm font-medium">{completedMilestones}</p>
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">
-                            Progress
-                          </p>
+                          <p className="text-xs text-muted-foreground">Progress</p>
                         </div>
-                        <p className="text-sm font-medium">
-                          {Math.round(progressPercentage)}%
-                        </p>
+                        <p className="text-sm font-medium">{Math.round(progressPercentage)}%</p>
                       </div>
-                      {assignment.estimatedHours && assignment.actualHours && (
+                      {assignment.estimatedHours && assignment.actualHours ? (
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <Clock className="w-4 h-4 text-muted-foreground" />
-                            <p className="text-xs text-muted-foreground">
-                              Time Efficiency
-                            </p>
+                            <p className="text-xs text-muted-foreground">Time Efficiency</p>
                           </div>
                           <p className="text-sm font-medium">
-                            {Math.round(
-                              (assignment.estimatedHours /
-                                assignment.actualHours) *
-                              100
-                            )}
-                            %
+                            {Math.round((assignment.estimatedHours / assignment.actualHours) * 100)}%
                           </p>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   )}
 
-                  {/* Progress Bar */}
+                  {/* ── Progress bar ── */}
                   <div className="space-y-2">
                     <Progress value={progressPercentage} className="h-2" />
                     <div className="flex justify-between items-center text-xs text-muted-foreground">
-                      <span>
-                        {completedMilestones} of {assignment.milestones.length}{" "}
-                        milestones completed
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span>Assigned by {assignment.assignedBy}</span>
-                      </div>
+                      <span>{completedMilestones} of {assignment.milestones.length} milestones completed</span>
+                      <span>Assigned by {assignment.assignedBy}</span>
                     </div>
                   </div>
 
-                  {/* Team Members */}
+                  {/* ── Team members ── */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Assigned Team</Label>
                     <div className="flex items-center gap-2 justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {assignment.assignedTo.map((member) => {
-                          const memberData = mockTeamMembers.find(
-                            (m) => m.name === member
-                          );
+                          const memberData = mockTeamMembers.find((m) => m.name === member);
                           return (
-                            <div
-                              key={member}
-                              className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg"
-                            >
+                            <div key={member} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
                               <Avatar className="w-6 h-6">
                                 <AvatarFallback className="text-xs">
-                                  {member
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
+                                  {member.split(" ").map((n) => n[0]).join("")}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-                                <div className="text-sm font-medium">
-                                  {member}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {memberData?.role}
-                                </div>
+                                <div className="text-sm font-medium">{member}</div>
+                                <div className="text-xs text-muted-foreground">{memberData?.role}</div>
                               </div>
                               <div
                                 className={`w-2 h-2 rounded-full ${memberData?.availability === "available"
-                                  ? "bg-success"
-                                  : memberData?.availability === "busy"
-                                    ? "bg-warning"
-                                    : "bg-muted"
+                                    ? "bg-success"
+                                    : memberData?.availability === "busy"
+                                      ? "bg-warning"
+                                      : "bg-muted"
                                   }`}
                               />
                             </div>
@@ -1402,31 +1068,17 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                       {assignment.milestones.length === 0 && (
                         <div>
                           <span className="text-sm text-muted-foreground mx-2">
-                            {assignment.status === "completed"
-                              ? "Completed"
-                              : "Mark as Complete"}
+                            {assignment.status === "completed" ? "Completed" : "Mark as Complete"}
                           </span>
                           <Button
                             size="sm"
-                            variant={
-                              assignment.status === "completed"
-                                ? "default"
-                                : "outline"
-                            }
+                            variant={assignment.status === "completed" ? "default" : "outline"}
                             className={
                               assignment.status === "completed"
                                 ? "h-8 w-8 p-0 bg-success text-success-foreground hover:bg-success/90"
                                 : "h-8 w-8 p-0 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30"
                             }
-                            title={
-                              assignment.status === "completed"
-                                ? "Completed"
-                                : "Mark as Complete"
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAssignmentComplete(assignment.id);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); handleAssignmentComplete(assignment.id); }}
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
@@ -1435,7 +1087,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                     </div>
                   </div>
 
-                  {/* Milestones */}
+                  {/* ── Milestones ── */}
                   {assignment.milestones.length > 0 && (
                     <div className="space-y-3">
                       <Label className="text-sm font-medium">Milestones</Label>
@@ -1443,72 +1095,43 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                         {assignment.milestones.map((milestone) => (
                           <div
                             key={milestone.id}
-                            className={`flex items-center justify-between p-3 bg-muted/20 rounded-lg cursor-pointer hover:bg-muted/30 transition-colors`}
+                            className="flex items-center justify-between p-3 bg-muted/20 rounded-lg cursor-pointer hover:bg-muted/30 transition-colors"
                             onClick={() => {
-                              setSelectedMilestone({
-                                assignmentId: assignment.id,
-                                milestoneId: milestone.id,
-                              });
+                              setSelectedMilestone({ assignmentId: assignment.id, milestoneId: milestone.id });
                               setIsMilestoneDialogOpen(true);
                             }}
                           >
                             <div className="flex items-center gap-3 flex-1">
                               <Button
                                 size="sm"
-                                variant={
-                                  milestone.status === "completed"
-                                    ? "default"
-                                    : "outline"
-                                }
+                                variant={milestone.status === "completed" ? "default" : "outline"}
                                 className={
                                   milestone.status === "completed"
                                     ? "bg-success text-success-foreground hover:bg-success/90"
                                     : "bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30"
                                 }
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMilestoneComplete(
-                                    assignment.id,
-                                    milestone.id
-                                  );
-                                }}
+                                onClick={(e) => { e.stopPropagation(); handleMilestoneComplete(assignment.id, milestone.id); }}
                               >
                                 <CheckCircle2 className="w-3 h-3" />
                               </Button>
-
                               <div className="flex-1">
-                                <h4
-                                  className={`font-medium ${milestone.status === "completed"
-                                    ? "line-through text-muted-foreground"
-                                    : ""
-                                    }`}
-                                >
+                                <h4 className={`font-medium ${milestone.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
                                   {milestone.title}
                                 </h4>
-                                <p className="text-xs text-muted-foreground">
-                                  {milestone.description}
-                                </p>
+                                <p className="text-xs text-muted-foreground">{milestone.description}</p>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                                   <Calendar className="w-3 h-3" />
-                                  Due:{" "}
-                                  {new Date(
-                                    milestone.dueDate
-                                  ).toLocaleDateString('en-US', { timeZone: 'UTC' })}
-                                  {milestone.status === "completed" &&
-                                    milestone.completedBy && (
-                                      <>
-                                        • Completed by {milestone.completedBy}
-                                      </>
-                                    )}
+                                  Due: {new Date(milestone.dueDate).toLocaleDateString("en-US", { timeZone: "UTC" })}
+                                  {milestone.status === "completed" && milestone.completedBy && (
+                                    <> • Completed by {milestone.completedBy}</>
+                                  )}
                                 </div>
                               </div>
                             </div>
-
                             <Badge className={getStatusColor(milestone.status)}>
                               {milestone.status === "in-progress"
                                 ? "In Progress"
-                                : milestone.status.charAt(0).toUpperCase() +
-                                milestone.status.slice(1)}
+                                : milestone.status.charAt(0).toUpperCase() + milestone.status.slice(1)}
                             </Badge>
                           </div>
                         ))}
@@ -1522,21 +1145,13 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
         </div>
       )}
 
-      {/* Milestone Details Dialog */}
-      <Dialog
-        open={isMilestoneDialogOpen}
-        onOpenChange={setIsMilestoneDialogOpen}
-      >
+      {/* ── Milestone details dialog ── */}
+      <Dialog open={isMilestoneDialogOpen} onOpenChange={setIsMilestoneDialogOpen}>
         <DialogContent className="max-w-2xl">
           {selectedMilestone &&
             (() => {
-              const assignment = assignments.find(
-                (a) => a.id === selectedMilestone.assignmentId
-              );
-              const milestone = assignment?.milestones.find(
-                (m) => m.id === selectedMilestone.milestoneId
-              );
-
+              const assignment = assignments.find((a) => a.id === selectedMilestone.assignmentId);
+              const milestone = assignment?.milestones.find((m) => m.id === selectedMilestone.milestoneId);
               if (!milestone || !assignment) return null;
 
               return (
@@ -1546,144 +1161,121 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                       <Target className="w-5 h-5" />
                       {milestone.title}
                     </DialogTitle>
-                    <DialogDescription>
-                      {milestone.description}
-                    </DialogDescription>
+                    <DialogDescription>{milestone.description}</DialogDescription>
                   </DialogHeader>
 
                   <div className="space-y-6 py-4">
-                    {/* Milestone Status */}
+                    {/* Status + due date */}
                     <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
                       <div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Status
-                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">Status</p>
                         <Badge className={getStatusColor(milestone.status)}>
                           {milestone.status === "in-progress"
                             ? "In Progress"
-                            : milestone.status.charAt(0).toUpperCase() +
-                            milestone.status.slice(1)}
+                            : milestone.status.charAt(0).toUpperCase() + milestone.status.slice(1)}
                         </Badge>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Due Date
-                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">Due Date</p>
                         <p className="text-sm font-medium">
-                          {milestone.dueDate ? new Date(milestone.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : 'N/A'}
+                          {milestone.dueDate
+                            ? new Date(milestone.dueDate).toLocaleDateString("en-US", { timeZone: "UTC" })
+                            : "N/A"}
                         </p>
                       </div>
                     </div>
 
-                    {/* Assignment Context */}
+                    {/* Assignment context – includes process info */}
                     <div className="space-y-3">
-                      <Label className="text-sm font-medium">
-                        Assignment Context
-                      </Label>
+                      <Label className="text-sm font-medium">Assignment Context</Label>
                       <div className="grid grid-cols-2 gap-4 p-3 bg-muted/20 rounded-lg">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Assignment
-                          </p>
-                          <p className="text-sm font-medium">
-                            {assignment.description}
-                          </p>
+                          <p className="text-xs text-muted-foreground mb-1">Assignment</p>
+                          <p className="text-sm font-medium">{assignment.description}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Priority
-                          </p>
-                          <Badge
-                            className={getPriorityColor(assignment.priority)}
-                          >
-                            {assignment.priority.charAt(0).toUpperCase() +
-                              assignment.priority.slice(1)}
+                          <p className="text-xs text-muted-foreground mb-1">Priority</p>
+                          <Badge className={getPriorityColor(assignment.priority)}>
+                            {assignment.priority.charAt(0).toUpperCase() + assignment.priority.slice(1)}
                           </Badge>
                         </div>
+                        {/* ── Process info visible to developer in milestone dialog ── */}
+                        {assignment.processName && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Process</p>
+                            <p className="text-sm font-medium text-foreground">
+                              {assignment.processId} — {assignment.processName}
+                              {assignment.processDepartment && (
+                                <span className="text-muted-foreground ml-1">
+                                  · {assignment.processDepartment}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        )}
+                        {assignment.processDepartment && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Department</p>
+                            <p className="text-sm font-medium">{assignment.processDepartment}</p>
+                          </div>
+                        )}
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Assigned Team
-                          </p>
-                          <p className="text-sm font-medium">
-                            {assignment.assignedTo.join(", ")}
-                          </p>
+                          <p className="text-xs text-muted-foreground mb-1">Assigned Team</p>
+                          <p className="text-sm font-medium">{assignment.assignedTo.join(", ")}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Assignment Due
-                          </p>
+                          <p className="text-xs text-muted-foreground mb-1">Assignment Due</p>
                           <p className="text-sm font-medium">
-                            {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : 'N/A'}
+                            {assignment.dueDate
+                              ? new Date(assignment.dueDate).toLocaleDateString("en-US", { timeZone: "UTC" })
+                              : "N/A"}
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Milestone Progress Info */}
+                    {/* Progress info */}
                     <div className="space-y-3">
-                      <Label className="text-sm font-medium">
-                        Progress Information
-                      </Label>
+                      <Label className="text-sm font-medium">Progress Information</Label>
                       <div className="p-3 bg-muted/20 rounded-lg space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">
-                            Milestone Progress
-                          </span>
+                          <span className="text-sm text-muted-foreground">Milestone Progress</span>
                           <span className="text-sm font-medium">
-                            {milestone.status === "completed"
-                              ? "100%"
-                              : milestone.status === "in-progress"
-                                ? "In Progress"
-                                : "0%"}
+                            {milestone.status === "completed" ? "100%" : milestone.status === "in-progress" ? "In Progress" : "0%"}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">
-                            Assignment Progress
-                          </span>
+                          <span className="text-sm text-muted-foreground">Assignment Progress</span>
                           <span className="text-sm font-medium">
                             {Math.round(
-                              (assignment as any).progressPercent !== undefined
-                                ? (assignment as any).progressPercent
+                              assignment.progressPercent !== undefined
+                                ? assignment.progressPercent
                                 : assignment.milestones.length > 0
-                                  ? (assignment.milestones.filter(
-                                    (m) => m.status === "completed"
-                                  ).length /
+                                  ? (assignment.milestones.filter((m) => m.status === "completed").length /
                                     assignment.milestones.length) *
                                   100
                                   : 0
-                            )}
-                            %
+                            )}%
                           </span>
                         </div>
-                        {milestone.status === "completed" &&
-                          milestone.completedBy && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">
-                                Completed By
-                              </span>
-                              <span className="text-sm font-medium">
-                                {milestone.completedBy}
-                              </span>
-                            </div>
-                          )}
-                        {milestone.status === "completed" &&
-                          milestone.completedAt && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">
-                                Completed On
-                              </span>
-                              <span className="text-sm font-medium">
-                                {new Date(
-                                  milestone.completedAt
-                                ).toLocaleDateString('en-US', { timeZone: 'UTC' })}
-                              </span>
-                            </div>
-                          )}
+                        {milestone.status === "completed" && milestone.completedBy && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Completed By</span>
+                            <span className="text-sm font-medium">{milestone.completedBy}</span>
+                          </div>
+                        )}
+                        {milestone.status === "completed" && milestone.completedAt && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Completed On</span>
+                            <span className="text-sm font-medium">
+                              {new Date(milestone.completedAt).toLocaleDateString("en-US", { timeZone: "UTC" })}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* Action buttons */}
                     <div className="flex gap-2">
                       {milestone.status === "assigned" || milestone.status === "overdue" ? (
                         <Button
@@ -1738,10 +1330,7 @@ export function TeamAssignments({ processId }: TeamAssignmentsProps) {
                   </div>
 
                   <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsMilestoneDialogOpen(false)}
-                    >
+                    <Button variant="outline" onClick={() => setIsMilestoneDialogOpen(false)}>
                       Close
                     </Button>
                   </DialogFooter>

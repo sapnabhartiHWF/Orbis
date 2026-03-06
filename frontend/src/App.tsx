@@ -10,7 +10,6 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingAIAgent } from "@/components/FloatingAIAgent";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
-import UserProfile from "@/components/UserProfile";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setLogoutCallback } from "@/services/api";
 import Index from "./pages/Index";
@@ -25,9 +24,16 @@ import TeamChat from "./pages/TeamChat";
 import Agile from "./pages/Agile";
 import Analytics from "./pages/Analytics";
 import Leaderboard from "./pages/Leaderboard";
+import Notifications from "./pages/Notifications";
 import SLA from "./pages/SLA";
 import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/login";
+import { RPALeadProfile } from "./pages/Profiles/Rpaleadprofile";
+import { BusinessOwnerProfile } from "./pages/Profiles/Businessownerprofile";
+import { AutomationEngineerProfile } from "./pages/Profiles/Automationengineerprofile";
+import { QAEngineerProfile } from "./pages/Profiles/Qaengineerprofile";
+import { BusinessAnalystProfile } from "./pages/Profiles/Businessanalystprofile";
+import Demo from "./pages/demo";
 
 // Configure React Query with optimized defaults for performance
 const queryClient = new QueryClient({
@@ -53,7 +59,35 @@ const RoleProfileRoute = () => {
   if (!role || !allowedProfileRoles.includes(role)) {
     return <Navigate to="/profile" replace />;
   }
-  return <UserProfile />;
+  // Default to Automation Engineer profile for other roles
+  return <AutomationEngineerProfile />;
+};
+
+// Profile route component that shows the appropriate profile based on user role
+const ProfileRoute = () => {
+  const { user } = useAuth();
+  const roleId = user?.RoleId || parseInt(localStorage.getItem('roleId') || '0');
+  
+  // Route to specific profile based on role
+  if (roleId === 3) {
+    // Automation Engineer / RPA Engineer
+    return <AutomationEngineerProfile />;
+  } else if (roleId === 16) {
+    // QA Engineer
+    return <QAEngineerProfile />;
+  } else if (roleId === 17) {
+    // Business Analyst
+    return <BusinessAnalystProfile />;
+  } else if (roleId === 14) {
+    // RPA Lead / COE Manager
+    return <RPALeadProfile />;
+  } else if (roleId === 15) {
+    // Business Owner
+    return <BusinessOwnerProfile />;
+  }
+  
+  // Default to Automation Engineer profile for other roles
+  return <AutomationEngineerProfile />;
 };
 
 const AppContent = () => {
@@ -110,9 +144,11 @@ const AppContent = () => {
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/agile" element={<Agile />} />
+              <Route path="/notifications" element={<Notifications />} />
               <Route path="/profile/:role" element={<RoleProfileRoute />} />
-              <Route path="/profile" element={<UserProfile />} />
+              <Route path="/profile" element={<ProfileRoute />} />
               <Route path="*" element={<NotFound />} />
+              <Route path="/demo" element={<Demo />} />
             </Routes>
           </div>
         </main>

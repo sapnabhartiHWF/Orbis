@@ -10,7 +10,7 @@ import { MessageSquare, Loader, Search, RefreshCw, Mail, ChevronRight } from "lu
 import { useToast } from "@/hooks/use-toast"
 import { useNavigate } from "react-router-dom"
 
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app"
 const GET_EMAILS_URL = `${API_BASE_URL}/api/emails`
 
 export default function TeamChat() {

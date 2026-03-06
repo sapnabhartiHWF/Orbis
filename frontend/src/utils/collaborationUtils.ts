@@ -81,6 +81,8 @@ export interface TeamMember {
 export interface Assignment {
   id: string
   processId: string
+  processName?: string;
+  processDepartment?: string;
   assignedTo: string[]
   assignedBy: string
   assignedAt: string

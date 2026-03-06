@@ -36,7 +36,7 @@ export interface ChangeRequest {
 }
 
 
-const url = "http://127.0.0.1:8000/api/rulebook";
+const url = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/rulebook";
 
 
 export const fetchRulesData = async (botId?: number | string) => {   // ✅ Accept botId

@@ -86,12 +86,12 @@ export function CommentSystem({
 
   const mentionRef = useRef<HTMLDivElement>(null);
 
-  const userUrl = "http://127.0.0.1:8000/api/users";
-  const getcmtUrl = "http://127.0.0.1:8000/api/get-comments";
-  const addcmtUrl = "http://127.0.0.1:8000/api/add-comment";
-  const reactCommentUrl = "http://127.0.0.1:8000/api/react-comment";
-  const getAllReact = "http://127.0.0.1:8000/api/get-all-reacts";
-  const deleteReactUrl = "http://127.0.0.1:8000/api/delete-reaction";
+  const userUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/users";
+  const getcmtUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/get-comments";
+  const addcmtUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/add-comment";
+  const reactCommentUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/react-comment";
+  const getAllReact = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/get-all-reacts";
+  const deleteReactUrl = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/delete-reaction";
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const token = localStorage.getItem("token");
@@ -685,7 +685,7 @@ function CommentItem({
         MentionedUserIDs: [],
       };
 
-      const response = await fetch("http://127.0.0.1:8000/api/add-comment", {
+      const response = await fetch("https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/add-comment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

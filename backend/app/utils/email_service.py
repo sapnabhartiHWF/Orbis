@@ -21,7 +21,7 @@ def get_smtp_config():
     return {
         'smtp_server': Config.SMTP_SERVER or 'smtp.gmail.com',
         'smtp_port': Config.SMTP_PORT or 587,
-        'smtp_username': Config.SMTP_USERNAME or '',
+        'smtp_username': Config.SMTP_USERNAME or '', 
         'smtp_password': Config.SMTP_PASSWORD or '',
         'from_email': Config.FROM_EMAIL or Config.SMTP_USERNAME or '',
         'use_tls': Config.SMTP_USE_TLS

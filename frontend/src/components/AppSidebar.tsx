@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { 
   Activity, 
   Target, 
@@ -18,7 +18,8 @@ import {
   TrendingUp,
   LogOut,
   Bot,
-  CheckCircle
+  CheckCircle,
+  Bell,
 } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
@@ -114,6 +115,13 @@ const navigationGroups = [
         isNew: true
       },
       { 
+        title: "Notifications", 
+        url: "/notifications", 
+        icon: Bell,
+        description: "Alerts & approvals inbox",
+        isNew: false
+      },
+      { 
         title: "Agile Board", 
         url: "/agile", 
         icon: Kanban,
@@ -157,6 +165,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed"
   const { logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   
   // Determine if we're using ICAT schema
   // For localhost/development, default to ICAT (matching backend logic)
@@ -209,6 +218,49 @@ export function AppSidebar() {
       default: return <Zap className="w-4 h-4" />
     }
   }
+
+  // Fetch unread notifications count for sidebar badge
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) {
+          setUnreadNotifications(0)
+          return
+        }
+
+        const response = await fetch(
+          "https://basic-vivyan-vivek1902-64809d2b.koyeb.app/api/team/notifications?page=1&pageSize=20",
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && Array.isArray(data.data)) {
+            const unread = data.data.filter((n: any) => !n.IsRead).length
+            setUnreadNotifications(unread)
+          } else {
+            setUnreadNotifications(0)
+          }
+        } else {
+          setUnreadNotifications(0)
+        }
+      } catch {
+        setUnreadNotifications(0)
+      }
+    }
+
+    fetchUnreadCount()
+
+    const interval = setInterval(fetchUnreadCount, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <Sidebar className={`border-r border-border ${collapsed ? "w-36 mr-5" : "w-72"}`} collapsible="icon">
@@ -281,6 +333,11 @@ export function AppSidebar() {
                                 {item.isNew && (
                                   <Badge variant="secondary" className="text-xs px-1.5 py-0.5 bg-success text-success-foreground">
                                     NEW
+                                  </Badge>
+                                )}
+                                {item.title === "Notifications" && unreadNotifications > 0 && (
+                                  <Badge className="text-xs px-1.5 py-0.5 bg-destructive text-destructive-foreground">
+                                    {unreadNotifications}
                                   </Badge>
                                 )}
                               </div>

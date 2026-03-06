@@ -28,8 +28,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 // Mock data for SLA tracking
-const slaDefinitions = []
-/* [
+const slaDefinitions = [
   {
     id: "sla-001",
     processName: "Invoice Processing",
@@ -72,36 +71,32 @@ const slaDefinitions = []
     breaches: 8,
     owner: "IT Support"
   }
-] */
+]
 
-const kpiTrends = []
-/* [
+const kpiTrends = [
   { month: "Jan", cycleTime: 4.2, resolutionTime: 2.1, throughput: 94 },
   { month: "Feb", cycleTime: 3.8, resolutionTime: 1.9, throughput: 96 },
   { month: "Mar", cycleTime: 4.5, resolutionTime: 2.3, throughput: 92 },
   { month: "Apr", cycleTime: 3.9, resolutionTime: 2.0, throughput: 95 },
   { month: "May", cycleTime: 3.6, resolutionTime: 1.8, throughput: 97 },
   { month: "Jun", cycleTime: 4.1, resolutionTime: 2.2, throughput: 93 }
-] */
+]
 
-const complianceByDepartment = []
-/* [
+const complianceByDepartment = [
   { department: "Finance", compliance: 92, processes: 15 },
   { department: "Sales", compliance: 97, processes: 8 },
   { department: "IT", compliance: 88, processes: 22 },
   { department: "HR", compliance: 94, processes: 12 },
   { department: "Operations", compliance: 91, processes: 18 }
-] */
+]
 
-const complianceByRegion = []
-/* [
+const complianceByRegion = [
   { region: "Americas", compliance: 95, color: "#22c55e" },
   { region: "EMEA", compliance: 92, color: "#3b82f6" },
   { region: "APAC", compliance: 89, color: "#f59e0b" }
-] */
+]
 
-const recentAlerts = []
-/* [
+const recentAlerts = [
   {
     id: "alert-001",
     processName: "Invoice Processing",
@@ -126,7 +121,7 @@ const recentAlerts = []
     time: "1 hour ago",
     message: "Throughput below target for 2 consecutive hours"
   }
-] */
+]
 
 const chartConfig = {
   cycleTime: {

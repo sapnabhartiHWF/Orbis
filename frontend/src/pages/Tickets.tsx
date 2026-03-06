@@ -53,7 +53,7 @@ import { getExceptionSummary } from "@/utils/ticketExceptionIntegration"
 import { Loader } from "lucide-react"
 
 // API URLs
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://basic-vivyan-vivek1902-64809d2b.koyeb.app"
 const GET_TICKETS_URL = `${API_BASE_URL}/api/get_tickets`
 const ADD_TICKET_URL = `${API_BASE_URL}/api/add_ticket`
 const UPDATE_TICKET_URL = `${API_BASE_URL}/api/update_ticket`

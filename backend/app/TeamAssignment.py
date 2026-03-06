@@ -19,7 +19,8 @@ def insert_team_assignment_with_milestones(
     status,
     progress_percent,
     logged_in_user_id,
-    milestones_json
+    milestones_json,
+    process_id=None
 ):
     conn = connect_to_database()
     cursor = conn.cursor()
@@ -41,6 +42,7 @@ def insert_team_assignment_with_milestones(
             @ProgressPercent = %s,
             @LoggedInUserId = %s,
             @MilestonesJSON = %s,
+            @Process_Id = %s,
             @NewAssignmentId = @NewAssignmentId OUTPUT;
 
         SELECT @NewAssignmentId AS AssignmentId;
@@ -55,7 +57,8 @@ def insert_team_assignment_with_milestones(
             status,
             progress_percent,
             logged_in_user_id,
-            milestones_json_str
+            milestones_json_str,
+            process_id
         ))
 
         result = cursor.fetchone()
@@ -96,6 +99,15 @@ def insert_team_assignment_route():
 
     assigned_to_ids_formatted = [{"UserId": uid} for uid in assigned_to_ids]
 
+    # Extract and validate Process_Id
+    process_id_raw = data.get("Process_Id")
+    process_id = None
+    if process_id_raw is not None:
+        try:
+            process_id = int(process_id_raw) if not isinstance(process_id_raw, int) else process_id_raw
+        except (ValueError, TypeError):
+            process_id = None
+
     success, result = insert_team_assignment_with_milestones(
         DBSCHEMA=DBSCHEMA,
         assignment_name=data["Assignment_Name"],
@@ -106,7 +118,8 @@ def insert_team_assignment_route():
         status=data["Status"],
         progress_percent=data.get("ProgressPercent", 0.00),
         logged_in_user_id=user_id,
-        milestones_json=data.get("Milestones", [])
+        milestones_json=data.get("Milestones", []),
+        process_id=process_id  # Fixed: Frontend sends Process_Id (with underscore)
     )
 
     if success:
